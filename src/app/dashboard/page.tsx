@@ -8,26 +8,20 @@ import {
   Layers, 
   Clock, 
   CheckCircle2, 
-  AlertCircle, 
   Copy, 
   Check, 
   Trash2, 
-  ExternalLink, 
   FileText, 
   Users, 
   Settings as SettingsIcon, 
   X, 
-  ShieldCheck, 
-  ChevronRight, 
   Briefcase, 
   Eye, 
   Ban, 
   TrendingUp, 
   ThumbsUp, 
-  Award,
   Sparkles,
-  Calendar,
-  Lock
+  Calendar
 } from 'lucide-react';
 import { 
   InterviewInvitation, 
@@ -43,9 +37,12 @@ import {
 
 function DashboardContent() {
   const searchParams = useSearchParams();
-  const initialTab = searchParams.get('tab') || 'interviews';
+  const tabParam = searchParams.get('tab');
+  const validInitialTab = (tabParam === 'reports' || tabParam === 'candidates' || tabParam === 'settings' || tabParam === 'interviews')
+    ? tabParam
+    : 'interviews';
 
-  const [activeTab, setActiveTab] = useState<'interviews' | 'reports' | 'candidates' | 'settings'>('interviews');
+  const [activeTab, setActiveTab] = useState<'interviews' | 'reports' | 'candidates' | 'settings'>(validInitialTab);
   const [interviews, setInterviews] = useState<InterviewInvitation[]>([]);
   const [metrics, setMetrics] = useState<RecruiterDashboardMetrics>({
     totalCreated: 0,
@@ -60,16 +57,13 @@ function DashboardContent() {
   const [baseUrl, setBaseUrl] = useState('http://localhost:3000');
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      setBaseUrl(window.location.origin);
-    }
+    const timer = setTimeout(() => {
+      if (typeof window !== 'undefined') {
+        setBaseUrl(window.location.origin);
+      }
+    }, 0);
+    return () => clearTimeout(timer);
   }, []);
-
-  useEffect(() => {
-    if (initialTab === 'reports' || initialTab === 'candidates' || initialTab === 'settings' || initialTab === 'interviews') {
-      setActiveTab(initialTab);
-    }
-  }, [initialTab]);
 
   const refreshData = async () => {
     const data = getInterviews();
@@ -88,7 +82,28 @@ function DashboardContent() {
   };
 
   useEffect(() => {
-    refreshData();
+    let isMounted = true;
+    const timer = setTimeout(async () => {
+      const localData = getInterviews();
+      if (!isMounted) return;
+      setInterviews(localData);
+      setMetrics(getRecruiterMetrics(localData));
+
+      try {
+        const serverData = await fetchInterviewsFromServer();
+        if (isMounted && serverData && serverData.length > 0) {
+          setInterviews(serverData);
+          setMetrics(getRecruiterMetrics(serverData));
+        }
+      } catch {
+        // Local data already set
+      }
+    }, 0);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
   }, []);
 
   const handleCopyLink = (token: string) => {
@@ -283,7 +298,7 @@ function DashboardContent() {
                 <div className="divide-y divide-slate-100">
                   {interviews.map((inv) => {
                     const isCopied = copiedToken === inv.token;
-                    const isExpired = inv.status === 'expired' || new Date(inv.expiresAt).getTime() < Date.now();
+                    const isExpired = inv.status === 'expired';
                     const statusBadgeColor = {
                       active: 'bg-emerald-50 text-emerald-700 border-emerald-200',
                       in_progress: 'bg-indigo-50 text-indigo-700 border-indigo-200',

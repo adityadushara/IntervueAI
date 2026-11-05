@@ -2,6 +2,7 @@ import {
   InterviewInvitation, 
   JobConfiguration, 
   LinkConfiguration, 
+  ExpirationOption,
   CandidateInfo, 
   CandidateAnswer, 
   RecruiterDashboardMetrics 
@@ -249,10 +250,10 @@ function syncToServer(interview: InterviewInvitation) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(interview),
-    }).catch(err => {
+    }).catch(() => {
       // Background sync is best-effort for cross-window incognito isolation
     });
-  } catch (e) {
+  } catch {
     // Ignore in offline mode
   }
 }
@@ -264,10 +265,10 @@ function syncPatchToServer(token: string, updates: Partial<InterviewInvitation>)
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
-    }).catch(err => {
+    }).catch(() => {
       // Background sync is best-effort for cross-window incognito isolation
     });
-  } catch (e) {
+  } catch {
     // Ignore in offline mode
   }
 }
@@ -293,7 +294,7 @@ export async function fetchInterviewsFromServer(): Promise<InterviewInvitation[]
         return merged;
       }
     }
-  } catch (e) {
+  } catch {
     console.warn('Could not reach /api/interviews, using local cache');
   }
   return getInterviews();
@@ -315,7 +316,7 @@ export async function fetchInterviewByTokenFromServer(token: string): Promise<In
         return serverInv;
       }
     }
-  } catch (e) {
+  } catch {
     console.warn(`Could not reach /api/interviews/${token}`);
   }
   return null;
@@ -341,6 +342,25 @@ export function getInterviewById(id: string): InterviewInvitation | null {
   return interviews.find(i => i.id === id) || null;
 }
 
+/**
+ * Generates a cryptographically secure, unpredictable invitation token.
+ * Uses Web Crypto / Node crypto.randomUUID() (128 bits of entropy).
+ */
+export function generateSecureToken(): string {
+  if (typeof crypto !== 'undefined') {
+    if (typeof crypto.randomUUID === 'function') {
+      return `inv-${crypto.randomUUID().replace(/-/g, '')}`;
+    }
+    if (typeof crypto.getRandomValues === 'function') {
+      const bytes = new Uint8Array(16);
+      crypto.getRandomValues(bytes);
+      return `inv-${Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('')}`;
+    }
+  }
+  // Fallback for environments lacking crypto API
+  return `inv-${Date.now().toString(36)}${Math.random().toString(36).substring(2, 12)}`;
+}
+
 export function createInterview(
   jobConfig: JobConfiguration,
   linkConfig: LinkConfiguration,
@@ -348,9 +368,8 @@ export function createInterview(
 ): InterviewInvitation {
   const interviews = getInterviews();
   
-  // Generate random 16-character alphanumeric token
-  const randomChars = Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 10);
-  const token = `inv-${randomChars}`;
+  // Generate cryptographically secure token
+  const token = generateSecureToken();
 
   // Calculate expiration
   const now = Date.now();
@@ -363,7 +382,7 @@ export function createInterview(
   }
 
   const normalizedLinkConfig: LinkConfiguration = typeof linkConfig === 'string' 
-    ? { expiration: linkConfig as any }
+    ? { expiration: linkConfig as ExpirationOption }
     : linkConfig;
 
   const createdAt = new Date(now).toISOString();
@@ -372,8 +391,12 @@ export function createInterview(
   // Generate tailored questions
   const questions = generateQuestionsForJob(jobConfig);
 
+  const uniqueSuffix = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID().substring(0, 8)
+    : Math.random().toString(36).substring(2, 8);
+
   const newInvitation: InterviewInvitation = {
-    id: `intv-${now.toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
+    id: `intv-${now.toString(36)}-${uniqueSuffix}`,
     token,
     jobConfig,
     linkConfig: normalizedLinkConfig,
@@ -509,7 +532,7 @@ export function completeCandidateInterview(token: string, totalSeconds: number):
 
 export function getRecruiterMetrics(interviews: InterviewInvitation[]): RecruiterDashboardMetrics {
   const now = Date.now();
-  let totalCreated = interviews.length;
+  const totalCreated = interviews.length;
   let activeLinks = 0;
   let pendingInterviews = 0;
   let completedInterviews = 0;

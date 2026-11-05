@@ -2,13 +2,11 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { 
   Briefcase, 
   Layers, 
   Clock, 
   Sparkles, 
-  Plus, 
   X, 
   Check, 
   Copy, 
@@ -16,10 +14,8 @@ import {
   AlertCircle, 
   ArrowRight,
   ShieldCheck,
-  Calendar,
   Building,
   User,
-  Mail,
   Sliders
 } from 'lucide-react';
 import { 
@@ -36,8 +32,6 @@ import { SAMPLE_JOB_TITLES, DEFAULT_SKILLS_BY_ROLE } from '@/lib/mockData';
 import { createInterview } from '@/lib/storage';
 
 export default function CreateInterviewPage() {
-  const router = useRouter();
-
   // Company & Candidate Details
   const [companyName, setCompanyName] = useState('Acme Global Tech');
   const [candidateName, setCandidateName] = useState('Jordan Lee');
@@ -72,9 +66,12 @@ export default function CreateInterviewPage() {
   const [baseUrl, setBaseUrl] = useState('http://localhost:3000');
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      setBaseUrl(window.location.origin);
-    }
+    const timer = setTimeout(() => {
+      if (typeof window !== 'undefined') {
+        setBaseUrl(window.location.origin);
+      }
+    }, 0);
+    return () => clearTimeout(timer);
   }, []);
 
   const handleJobTitleSelect = (title: string) => {
@@ -323,10 +320,11 @@ export default function CreateInterviewPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Company Name */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                <label htmlFor="companyName" className="block text-xs font-semibold text-slate-700 mb-1.5">
                   Hiring Company <span className="text-rose-500">*</span>
                 </label>
                 <input
+                  id="companyName"
                   type="text"
                   value={companyName}
                   onChange={(e) => {
@@ -345,10 +343,11 @@ export default function CreateInterviewPage() {
 
               {/* Candidate Full Name */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                <label htmlFor="candidateName" className="block text-xs font-semibold text-slate-700 mb-1.5">
                   Candidate Full Name <span className="text-rose-500">*</span>
                 </label>
                 <input
+                  id="candidateName"
                   type="text"
                   value={candidateName}
                   onChange={(e) => {
@@ -367,10 +366,11 @@ export default function CreateInterviewPage() {
 
               {/* Candidate Email */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                <label htmlFor="candidateEmail" className="block text-xs font-semibold text-slate-700 mb-1.5">
                   Candidate Email <span className="text-rose-500">*</span>
                 </label>
                 <input
+                  id="candidateEmail"
                   type="email"
                   value={candidateEmail}
                   onChange={(e) => {
@@ -402,10 +402,11 @@ export default function CreateInterviewPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Job Title */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                <label htmlFor="jobTitle" className="block text-xs font-semibold text-slate-700 mb-1.5">
                   Job Title <span className="text-rose-500">*</span>
                 </label>
                 <input
+                  id="jobTitle"
                   type="text"
                   value={jobTitle}
                   onChange={(e) => {
@@ -439,10 +440,11 @@ export default function CreateInterviewPage() {
 
               {/* Seniority Level */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                <label htmlFor="seniorityLevel" className="block text-xs font-semibold text-slate-700 mb-1.5">
                   Seniority Level
                 </label>
                 <select
+                  id="seniorityLevel"
                   value={seniorityLevel}
                   onChange={(e) => setSeniorityLevel(e.target.value as SeniorityLevel)}
                   className="ui-input cursor-pointer"
@@ -458,10 +460,11 @@ export default function CreateInterviewPage() {
 
             {/* Job Description */}
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+              <label htmlFor="jobDescription" className="block text-xs font-semibold text-slate-700 mb-1.5">
                 Job Description <span className="text-rose-500">*</span>
               </label>
               <textarea
+                id="jobDescription"
                 rows={3}
                 value={jobDescription}
                 onChange={(e) => {
@@ -481,10 +484,11 @@ export default function CreateInterviewPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Required Experience */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                <label htmlFor="requiredExperience" className="block text-xs font-semibold text-slate-700 mb-1.5">
                   Required Experience <span className="text-rose-500">*</span>
                 </label>
                 <input
+                  id="requiredExperience"
                   type="text"
                   value={requiredExperience}
                   onChange={(e) => {
@@ -498,7 +502,7 @@ export default function CreateInterviewPage() {
 
               {/* Technical Skills */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                <label htmlFor="newSkillInput" className="block text-xs font-semibold text-slate-700 mb-1.5">
                   Required Technical Skills <span className="text-rose-500">*</span>
                 </label>
                 <div className="flex flex-wrap gap-1.5 mb-2">
@@ -520,6 +524,7 @@ export default function CreateInterviewPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <input
+                    id="newSkillInput"
                     type="text"
                     value={newSkillInput}
                     onChange={(e) => setNewSkillInput(e.target.value)}
@@ -562,9 +567,9 @@ export default function CreateInterviewPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Interview Type */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                <span className="block text-xs font-semibold text-slate-700 mb-1.5">
                   Interview Type
-                </label>
+                </span>
                 <div className="grid grid-cols-2 gap-2">
                   {(['Technical', 'HR', 'Behavioural', 'Mixed'] as const).map((type) => (
                     <button
@@ -585,9 +590,9 @@ export default function CreateInterviewPage() {
 
               {/* Difficulty */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                <span className="block text-xs font-semibold text-slate-700 mb-1.5">
                   Difficulty Level
-                </label>
+                </span>
                 <div className="grid grid-cols-3 gap-2">
                   {(['Beginner', 'Intermediate', 'Advanced'] as const).map((diff) => (
                     <button
@@ -610,10 +615,11 @@ export default function CreateInterviewPage() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
               {/* Question Count */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                <label htmlFor="questionCount" className="block text-xs font-semibold text-slate-700 mb-1.5">
                   Questions Count
                 </label>
                 <select
+                  id="questionCount"
                   value={questionCount}
                   onChange={(e) => setQuestionCount(Number(e.target.value))}
                   className="ui-input cursor-pointer"
@@ -627,10 +633,11 @@ export default function CreateInterviewPage() {
 
               {/* Expected Duration */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                <label htmlFor="expectedDurationMinutes" className="block text-xs font-semibold text-slate-700 mb-1.5">
                   Expected Duration
                 </label>
                 <select
+                  id="expectedDurationMinutes"
                   value={expectedDurationMinutes}
                   onChange={(e) => setExpectedDurationMinutes(Number(e.target.value))}
                   className="ui-input cursor-pointer"
@@ -644,10 +651,11 @@ export default function CreateInterviewPage() {
 
               {/* Expiration */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                <label htmlFor="expiration" className="block text-xs font-semibold text-slate-700 mb-1.5">
                   Link Expiration
                 </label>
                 <select
+                  id="expiration"
                   value={expiration}
                   onChange={(e) => setExpiration(e.target.value as ExpirationOption)}
                   className="ui-input cursor-pointer"

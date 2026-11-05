@@ -1,8 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import { 
   Bot, 
   User, 
@@ -17,7 +16,7 @@ import {
   Lock,
   Check
 } from 'lucide-react';
-import { InterviewInvitation, CandidateAnswer } from '@/types/interview';
+import { InterviewInvitation } from '@/types/interview';
 import { 
   getInterviewByToken, 
   fetchInterviewByTokenFromServer,
@@ -29,7 +28,6 @@ import { getCandidateGreeting, generateMockFeedbackForAnswer } from '@/lib/mockI
 
 function CandidateInterviewContent() {
   const params = useParams();
-  const router = useRouter();
   const token = (params?.token as string) || '';
 
   // Data states
@@ -378,10 +376,11 @@ function CandidateInterviewContent() {
             <form onSubmit={handleStartInterview} className="space-y-4">
               {/* Pre-filled Name */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                <label htmlFor="candidateOnboardingName" className="block text-xs font-semibold text-slate-700 mb-1.5">
                   Candidate Name
                 </label>
                 <input
+                  id="candidateOnboardingName"
                   type="text"
                   readOnly
                   value={candidateName}
@@ -391,10 +390,11 @@ function CandidateInterviewContent() {
 
               {/* Pre-filled Email */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                <label htmlFor="candidateOnboardingEmail" className="block text-xs font-semibold text-slate-700 mb-1.5">
                   Candidate Email
                 </label>
                 <input
+                  id="candidateOnboardingEmail"
                   type="email"
                   readOnly
                   value={candidateEmail}
@@ -549,7 +549,9 @@ function CandidateInterviewContent() {
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <div className="flex items-center gap-2">
               <User className="w-4 h-4 text-indigo-600" />
-              <h3 className="text-sm font-bold text-slate-900">Your Response</h3>
+              <label htmlFor="candidateResponseInput" className="text-sm font-bold text-slate-900 cursor-pointer">
+                Your Response
+              </label>
             </div>
             <div className="text-xs text-slate-500 font-medium flex items-center gap-2">
               <span>{wordCount} words</span>
@@ -560,6 +562,7 @@ function CandidateInterviewContent() {
 
           <form onSubmit={handleAnswerSubmit} className="space-y-4">
             <textarea
+              id="candidateResponseInput"
               rows={8}
               value={currentAnswer}
               onChange={(e) => {

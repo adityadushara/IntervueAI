@@ -2,17 +2,14 @@
  * End-to-End Automated Test Suite for IntervueAI
  * Phases Tested:
  * 1. Interview Creation & Expiry Calculation (24h/48h)
- * 2. Token Generation & Validation
+ * 2. Token Generation & Validation (CSPRNG Entropy)
  * 3. Candidate Invitation Isolation (No recruiter settings exposed)
  * 4. Token Security (Invalid, Expired, Revoked, Re-use prevention)
  * 5. Full Interview Execution (Start -> Answer Q1..Qn -> Complete)
  * 6. Recruiter Dashboard Metrics & Report Integrity
  * 7. Server Store & Cross-Session / Incognito Persistence
- * 8. API Route Handlers (GET / POST / PATCH)
+ * 8. API Route Handlers (GET / POST / PATCH) & Data Sanitization
  */
-
-import fs from 'fs';
-import path from 'path';
 
 // 1. Setup in-memory localStorage for Node environment to test storage.ts
 class LocalStorageMock {
@@ -36,11 +33,16 @@ class LocalStorageMock {
 }
 
 const mockStorage = new LocalStorageMock();
-(globalThis as any).window = {
+interface GlobalWithStorage {
+  window: { localStorage: LocalStorageMock; location: { origin: string } };
+  localStorage: LocalStorageMock;
+}
+const globalObj = globalThis as unknown as GlobalWithStorage;
+globalObj.window = {
   localStorage: mockStorage,
   location: { origin: 'http://localhost:3000' }
 };
-(globalThis as any).localStorage = mockStorage;
+globalObj.localStorage = mockStorage;
 
 // Import application modules under test
 import { 
@@ -52,7 +54,7 @@ import {
   completeCandidateInterview, 
   revokeInterview, 
   getRecruiterMetrics,
-  SEEDED_RECRUITER_INTERVIEWS
+  generateSecureToken
 } from '../src/lib/storage';
 
 import {
@@ -114,7 +116,8 @@ async function runTestSuite() {
   );
 
   assert(Boolean(created24h.id && created24h.token), 'Interview is assigned unique ID and token');
-  assert(created24h.token.length >= 10, 'Token length meets security entropy requirement (>= 10 chars)');
+  assert(created24h.token.startsWith('inv-') && created24h.token.length >= 16, 'Token length meets security entropy requirement (>= 16 chars)');
+  assert(generateSecureToken().length >= 20, 'generateSecureToken produces cryptographically secure token format');
   assert(created24h.status === 'active', 'Initial status of newly generated interview is "active"');
   assert(created24h.candidate?.fullName === 'Jordan Reed', 'Candidate name correctly pre-filled');
   assert(created24h.candidate?.email === 'jordan.reed@example.com', 'Candidate email correctly pre-filled');
@@ -168,7 +171,7 @@ async function runTestSuite() {
 
   // Candidate interface restriction check
   // Candidates must only receive pre-filled info and Start button; cannot modify config
-  assert(typeof (retrieved as any).recruiterNotes === 'undefined', 'Candidate has no access to internal recruiter notes');
+  assert(!('recruiterNotes' in Object(retrieved)), 'Candidate has no access to internal recruiter notes');
   assert(retrieved?.status === 'active', 'Invitation status allows candidate to begin interview');
 
   // --------------------------------------------------------------------------
@@ -355,13 +358,23 @@ async function runTestSuite() {
   // --------------------------------------------------------------------------
   // TEST GROUP 8: API ROUTE HANDLERS
   // --------------------------------------------------------------------------
-  console.log('\n\x1b[36m--- Group 8: API Route Handlers ---\x1b[0m');
+  console.log('\n\x1b[36m--- Group 8: API Route Handlers & Data Sanitization ---\x1b[0m');
 
   // GET /api/interviews
   const getApiResponse = await getInterviewsApi();
   const getApiJson = await getApiResponse.json();
   assert(getApiResponse.status === 200, 'GET /api/interviews returns HTTP 200');
   assert(Array.isArray(getApiJson), 'GET /api/interviews returns array of interviews');
+
+  // POST /api/interviews
+  const postResponse = await postInterviewApi(
+    new Request('http://localhost:3000/api/interviews', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(created48h)
+    })
+  );
+  assert(postResponse.status === 201, 'POST /api/interviews returns HTTP 201 for valid invitation creation');
 
   // GET /api/interviews/[token] (valid)
   const getByTokenResponse = await getInterviewByTokenApi(
@@ -389,6 +402,41 @@ async function runTestSuite() {
   assert(patchResponse.status === 200, 'PATCH /api/interviews/[token] returns HTTP 200');
   const patchedJson = await patchResponse.json();
   assert(patchedJson.status === 'completed', 'PATCH /api/interviews/[token] successfully updates status to "completed"');
+
+  // DATA SANITIZATION CHECK: Ensure recruiter evaluation reports are NEVER leaked to candidate
+  const completedRecordWithReport = {
+    ...created24h,
+    status: 'completed' as const,
+    recruiterReport: {
+      overallAssessment: 'CONFIDENTIAL INTERNAL HIRING ASSESSMENT - Candidate showed good depth',
+      technicalCompetency: 'Strong' as const,
+      communicationClarity: 'Clear & Structured' as const,
+      notableStrengths: ['Architecture knowledge'],
+      areasToProbeInLiveRound: ['System scalability'],
+      recommendation: 'Advance to Technical Final' as const,
+      evaluationGeneratedAt: new Date().toISOString()
+    }
+  };
+  upsertServerInterview(completedRecordWithReport);
+
+  const candidateSanitizedResponse = await getInterviewByTokenApi(
+    new Request(`http://localhost:3000/api/interviews/${created24h.token}`),
+    { params: Promise.resolve({ token: created24h.token }) }
+  );
+  const candidateSanitizedJson = await candidateSanitizedResponse.json();
+  assert(candidateSanitizedResponse.status === 200, 'Candidate GET /api/interviews/[token] succeeds');
+  assert(typeof candidateSanitizedJson.recruiterReport === 'undefined', 'SECURITY: Candidate GET endpoint NEVER leaks recruiterReport to candidate');
+
+  // REJECT MODIFICATION OF COMPLETED INTERVIEW
+  const unauthorizedPatchResponse = await patchInterviewApi(
+    new Request(`http://localhost:3000/api/interviews/${created24h.token}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'in_progress' })
+    }),
+    { params: Promise.resolve({ token: created24h.token }) }
+  );
+  assert(unauthorizedPatchResponse.status === 403, 'SECURITY: Candidate cannot revert or modify completed interview (HTTP 403)');
 
   // --------------------------------------------------------------------------
   // FINAL TEST SUITE SUMMARY

@@ -6,13 +6,11 @@ export function getCandidateGreeting(jobConfig: JobConfiguration, candidateName:
 }
 
 export function generateMockFeedbackForAnswer(
-  question: InterviewQuestion,
-  answerText: string,
+  _question: InterviewQuestion,
+  _answerText: string,
   answerIndex: number,
   totalQuestions: number
 ): string {
-  const words = answerText.trim().split(/\s+/).filter(Boolean).length;
-  
   const intros = [
     "Thank you. Your response has been noted and logged for the hiring team.",
     "Got it. Thank you for walking through your thought process.",

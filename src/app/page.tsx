@@ -6,16 +6,10 @@ import {
   ArrowRight, 
   CheckCircle2, 
   Sparkles, 
-  PlusCircle, 
-  Layers, 
-  Briefcase, 
-  Users, 
-  FileText,
-  Clock,
-  ShieldCheck
+  PlusCircle 
 } from 'lucide-react';
 import { getInterviews, getRecruiterMetrics } from '@/lib/storage';
-import { InterviewInvitation, RecruiterDashboardMetrics } from '@/types/interview';
+import { RecruiterDashboardMetrics } from '@/types/interview';
 
 export default function OverviewPage() {
   const [metrics, setMetrics] = useState<RecruiterDashboardMetrics>({
@@ -27,8 +21,11 @@ export default function OverviewPage() {
   });
 
   useEffect(() => {
-    const data = getInterviews();
-    setMetrics(getRecruiterMetrics(data));
+    const timer = setTimeout(() => {
+      const data = getInterviews();
+      setMetrics(getRecruiterMetrics(data));
+    }, 0);
+    return () => clearTimeout(timer);
   }, []);
 
   return (

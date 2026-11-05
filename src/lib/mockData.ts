@@ -1,320 +1,291 @@
-import { InterviewConfig, InterviewQuestion, InterviewScore, CandidateAnswer } from '@/types/interview';
+import { JobConfiguration, InterviewQuestion, RecruiterEvaluation, CandidateAnswer } from '@/types/interview';
 
-export const POPULAR_ROLES = [
-  'Frontend Engineer',
+export const SAMPLE_JOB_TITLES = [
+  'Frontend Developer',
+  'Senior React Engineer',
   'Backend Engineer',
   'Full Stack Developer',
+  'DevOps & Cloud Engineer',
   'System Architect',
-  'DevOps / Cloud Engineer',
-  'AI / Machine Learning Engineer',
-  'Engineering Manager / Lead',
-  'Other / Custom Role',
+  'Engineering Manager',
+  'QA Automation Engineer',
 ] as const;
 
-export const DEFAULT_TOPICS_BY_ROLE: Record<string, string[]> = {
-  'Frontend Engineer': ['React', 'TypeScript', 'Next.js', 'CSS & Responsive Design', 'Web Performance', 'State Management'],
-  'Backend Engineer': ['Node.js', 'REST APIs', 'Databases & SQL', 'System Architecture', 'Microservices', 'Authentication & Security'],
-  'Full Stack Developer': ['React', 'Next.js', 'Node.js', 'PostgreSQL', 'API Design', 'Performance Optimization'],
-  'System Architect': ['High Availability', 'Distributed Systems', 'Caching & CDNs', 'Message Queues', 'Data Partitioning', 'Disaster Recovery'],
-  'DevOps / Cloud Engineer': ['Docker & Containers', 'Kubernetes', 'CI/CD Pipelines', 'AWS / Cloud Services', 'Terraform', 'Observability'],
-  'AI / Machine Learning Engineer': ['LLM Architectures', 'Prompt Engineering', 'Vector Databases', 'Python', 'Model Evaluation', 'Fine-tuning'],
-  'Engineering Manager / Lead': ['Team Leadership', 'Conflict Resolution', 'Technical Roadmap', '1:1 Coaching', 'Delivery Metrics', 'Hiring'],
-  'Other / Custom Role': ['Problem Solving', 'System Design', 'Communication', 'Technical Leadership', 'Best Practices'],
+export const DEFAULT_SKILLS_BY_ROLE: Record<string, string[]> = {
+  'Frontend Developer': ['React', 'TypeScript', 'Next.js', 'CSS / Tailwind', 'Web Vitals', 'State Management', 'Browser APIs'],
+  'Senior React Engineer': ['React 19', 'Next.js App Router', 'Server Components', 'TypeScript', 'Performance Profiling', 'Design Systems'],
+  'Backend Engineer': ['Node.js', 'REST & GraphQL', 'PostgreSQL', 'Redis', 'Microservices', 'Distributed Locking', 'API Security'],
+  'Full Stack Developer': ['React', 'Node.js', 'Next.js', 'SQL / NoSQL', 'System Architecture', 'CI/CD Pipelines'],
+  'DevOps & Cloud Engineer': ['Docker', 'Kubernetes', 'AWS', 'Terraform', 'CI/CD GitHub Actions', 'Observability (Prometheus)'],
+  'System Architect': ['High Availability', 'Distributed Messaging (Kafka)', 'Sharding & Replication', 'Caching Strategies', 'Rate Limiting'],
+  'Engineering Manager': ['Team Leadership', 'Sprint Delivery', 'Conflict Resolution', 'Mentorship & 1:1s', 'Hiring & Culture'],
+  'QA Automation Engineer': ['Playwright', 'Jest', 'Cypress', 'End-to-End Testing', 'API Automation', 'Test Strategy'],
 };
 
 interface QuestionBankItem {
-  roles: string[];
-  types: ('technical' | 'behavioral' | 'system_design' | 'mixed')[];
-  levels: ('junior' | 'mid' | 'senior' | 'lead')[];
+  tags: string[];
+  types: ('Technical' | 'HR' | 'Behavioural' | 'Mixed')[];
   category: string;
   text: string;
   context?: string;
-  sampleHints: string[];
-  keywords: string[];
+  hints: string[];
 }
 
-export const QUESTION_BANK: QuestionBankItem[] = [
-  // Frontend
+export const MASTER_QUESTION_BANK: QuestionBankItem[] = [
+  // Frontend & React
   {
-    roles: ['Frontend Engineer', 'Full Stack Developer'],
-    types: ['technical', 'mixed'],
-    levels: ['junior', 'mid', 'senior', 'lead'],
-    category: 'React & Core Architecture',
-    text: 'How do Next.js Server Components differ from traditional Client Components, and when would you choose one over the other in a high-traffic production application?',
+    tags: ['Frontend Developer', 'Senior React Engineer', 'Full Stack Developer', 'React', 'Next.js'],
+    types: ['Technical', 'Mixed'],
+    category: 'Architecture & Hydration',
+    text: 'How do Next.js Server Components differ from Client Components, and what factors determine whether a component should be rendered on the server versus client?',
     context: 'Think about hydration cost, bundle size, data fetching proximity to the database, and user interactivity.',
-    sampleHints: [
-      'Mention server-side data fetching without waterfall requests.',
-      'Explain that Client Components enable hooks (useState, useEffect) and DOM event listeners.',
-      'Discuss bundle size reduction because server component dependencies remain on the server.'
-    ],
-    keywords: ['bundle size', 'hydration', 'server', 'client', 'waterfall', 'use client', 'security']
+    hints: ['Mention reduction in client-side bundle size', 'Discuss hydration boundaries with "use client"', 'Explain server data access without waterfall requests']
   },
   {
-    roles: ['Frontend Engineer', 'Full Stack Developer'],
-    types: ['technical', 'mixed'],
-    levels: ['mid', 'senior', 'lead'],
-    category: 'Web Performance',
-    text: 'A user reports that a critical dashboard page in your application feels sluggish and experiences layout shifts during load. How do you diagnose and optimize Core Web Vitals (LCP, INP, CLS)?',
-    context: 'Focus on profiling tools, image optimization, dynamic imports, and render lifecycle.',
-    sampleHints: [
-      'Reference Chrome DevTools Performance panel or Lighthouse.',
-      'Address Largest Contentful Paint (LCP) with priority image loading and server-side rendering.',
-      'Address Cumulative Layout Shift (CLS) with explicit aspect ratios and reserved dimensions.'
-    ],
-    keywords: ['LCP', 'INP', 'CLS', 'Lighthouse', 'performance', 'layout shift', 'devtools', 'lazy load']
+    tags: ['Frontend Developer', 'Senior React Engineer', 'Full Stack Developer', 'Web Vitals', 'Performance'],
+    types: ['Technical', 'Mixed'],
+    category: 'Web Performance & Core Vitals',
+    text: 'A user reports that a critical page in your application feels sluggish and shifts during initial render. How do you diagnose and optimize Core Web Vitals (LCP, INP, CLS)?',
+    context: 'Focus on profiling tools, font/image loading optimizations, dynamic imports, and render lifecycle.',
+    hints: ['Reference Chrome DevTools Performance panel or Lighthouse', 'Explain priority image loading for LCP', 'Discuss reserved aspect ratios for CLS']
   },
   {
-    roles: ['Frontend Engineer', 'Full Stack Developer'],
-    types: ['technical', 'mixed'],
-    levels: ['junior', 'mid'],
-    category: 'State Management & Concurrency',
-    text: 'Explain how React handles re-renders and how you prevent unnecessary re-computations when passing complex objects or callbacks to deeply nested child components.',
-    context: 'Discuss memoization, referential equality, and state colocation.',
-    sampleHints: [
-      'Mention useMemo and useCallback for stable object references.',
-      'Discuss React.memo for component memoization.',
-      'Highlight keeping state as local as possible to avoid unnecessary tree updates.'
-    ],
-    keywords: ['re-render', 'useMemo', 'useCallback', 'React.memo', 'referential equality', 'state colocation']
-  },
-
-  // Backend
-  {
-    roles: ['Backend Engineer', 'Full Stack Developer'],
-    types: ['technical', 'mixed'],
-    levels: ['junior', 'mid', 'senior', 'lead'],
-    category: 'Database & Data Consistency',
-    text: 'How do you prevent race conditions and maintain data consistency when handling concurrent ticket purchases or inventory reservations in a database?',
-    context: 'Consider transaction isolation levels, optimistic vs pessimistic locking, and idempotency.',
-    sampleHints: [
-      'Compare optimistic locking (version numbers) with pessimistic locking (SELECT FOR UPDATE).',
-      'Explain ACID transaction boundaries and isolation levels (e.g., Read Committed vs Serializable).',
-      'Mention idempotency keys for client retry resilience.'
-    ],
-    keywords: ['optimistic locking', 'pessimistic locking', 'isolation level', 'ACID', 'race condition', 'idempotency']
+    tags: ['Frontend Developer', 'Senior React Engineer', 'React', 'State Management'],
+    types: ['Technical', 'Mixed'],
+    category: 'State Management & Re-renders',
+    text: 'Explain how React handles render tree updates. How do you prevent unnecessary re-computations when passing complex objects or callbacks down a component tree?',
+    context: 'Discuss referential equality, useMemo, useCallback, and state colocation.',
+    hints: ['Mention useMemo for expensive calculations', 'Highlight useCallback for stable function references', 'Explain that colocating state prevents unnecessary parent re-renders']
   },
   {
-    roles: ['Backend Engineer', 'Full Stack Developer'],
-    types: ['technical', 'mixed'],
-    levels: ['mid', 'senior', 'lead'],
-    category: 'API Design & Scaling',
-    text: 'Design a resilient rate-limiting mechanism for a public API that receives 50,000 requests per minute across multiple distributed server instances.',
-    context: 'Think about token bucket or sliding window algorithms, Redis storage, and failure handling.',
-    sampleHints: [
-      'Explain the Sliding Window Counter or Token Bucket algorithm.',
-      'Use Redis as a centralized high-speed in-memory store with TTL.',
-      'Discuss graceful degradation or fail-open strategy if the rate limiter cache goes down.'
-    ],
-    keywords: ['rate limit', 'token bucket', 'sliding window', 'redis', 'distributed', '429', 'headers']
+    tags: ['Frontend Developer', 'Senior React Engineer', 'TypeScript', 'CSS / Tailwind'],
+    types: ['Technical', 'Mixed'],
+    category: 'CSS Architecture & Layout Stability',
+    text: 'How do you structure responsive CSS architectures in enterprise design systems to avoid layout thrashing and maintain maintainability across large engineering teams?',
+    context: 'Consider utility-first CSS (Tailwind) versus CSS modules, CSS variables, and tokens.',
+    hints: ['Discuss design token consistency', 'Explain CSS containment and hardware-accelerated transforms', 'Address responsive breakpoints']
   },
   {
-    roles: ['Backend Engineer', 'Full Stack Developer'],
-    types: ['technical', 'mixed'],
-    levels: ['junior', 'mid', 'senior', 'lead'],
-    category: 'Security & Authentication',
-    text: 'Explain the security trade-offs between storing session state via JWT tokens in client cookies versus server-managed sessions in Redis. How do you handle token revocation?',
-    context: 'Discuss CSRF, XSS, token expiration, revocation lists, and horizontal scalability.',
-    sampleHints: [
-      'Explain that stateless JWTs cannot be instantly revoked without a centralized blacklist.',
-      'Compare cookie security flags: HttpOnly, Secure, SameSite.',
-      'Discuss short-lived access tokens combined with rotating refresh tokens.'
-    ],
-    keywords: ['JWT', 'cookie', 'HttpOnly', 'SameSite', 'revocation', 'refresh token', 'CSRF', 'XSS']
+    tags: ['Frontend Developer', 'Senior React Engineer', 'Browser APIs', 'JavaScript'],
+    types: ['Technical', 'Mixed'],
+    category: 'Asynchronous JavaScript & Event Loop',
+    text: 'Walk through how the browser Event Loop processes microtasks (promises) versus macrotasks (setTimeout, DOM events, requestAnimationFrame). Why does this distinction matter for UI responsiveness?',
+    context: 'Explain microtask queue prioritization and thread blocking.',
+    hints: ['Microtasks run immediately after current execution stack before rendering', 'Macrotasks yield back to event loop', 'Heavy sync tasks block the paint cycle']
+  },
+  {
+    tags: ['Frontend Developer', 'Senior React Engineer', 'Next.js', 'API Design'],
+    types: ['Technical', 'Mixed'],
+    category: 'Data Fetching & Cache Invalidation',
+    text: 'Describe how you handle client-side and server-side data caching, revalidation (e.g. SWR, React Query, or Next.js fetch tags), and optimistic UI updates during data mutations.',
+    context: 'Focus on rollback mechanisms when optimistic mutations fail on the backend.',
+    hints: ['Explain stale-while-revalidate semantics', 'Describe tagging cache tags for on-demand revalidation', 'Detail optimistic UI rollback on network error']
+  },
+  {
+    tags: ['Frontend Developer', 'Full Stack Developer', 'Security'],
+    types: ['Technical', 'Mixed'],
+    category: 'Frontend Security & XSS Mitigation',
+    text: 'What are the most common security vulnerabilities on the modern web (such as XSS, CSRF, and Clickjacking), and what concrete safeguards do you implement in frontend applications?',
+    context: 'Discuss Content Security Policy (CSP), cookie security flags (HttpOnly, SameSite), and DOM sanitization.',
+    hints: ['Explain escaping user inputs and avoiding dangerouslySetInnerHTML', 'Discuss SameSite cookies against CSRF', 'Detail CSP headers to restrict untrusted scripts']
+  },
+  {
+    tags: ['Frontend Developer', 'Senior React Engineer', 'Testing'],
+    types: ['Technical', 'Mixed'],
+    category: 'Frontend Testing Strategy',
+    text: 'How do you design a balanced testing pyramid for frontend applications across Unit tests (Jest/Vitest), Integration tests (React Testing Library), and End-to-End tests (Playwright)?',
+    context: 'Discuss confidence versus execution speed, mock boundaries, and user-centric assertions.',
+    hints: ['Test behavior, not implementation details', 'Focus unit tests on utilities and state reducers', 'Use Playwright for critical user checkout or authentication journeys']
+  },
+  {
+    tags: ['Frontend Developer', 'Senior React Engineer', 'Accessibility'],
+    types: ['Technical', 'Mixed'],
+    category: 'Accessibility (a11y) & Semantic HTML',
+    text: 'How do you ensure enterprise web applications are fully accessible according to WCAG 2.1 AA standards, including keyboard navigation, focus management, and screen reader announcements?',
+    context: 'Address ARIA live regions, focus trapping in modal dialogs, and semantic element usage.',
+    hints: ['Use semantic HTML (<button>, <dialog>, <nav>) before custom ARIA roles', 'Implement focus restoration when closing modals', 'Ensure high contrast ratios and visible focus rings']
+  },
+  {
+    tags: ['Frontend Developer', 'Senior React Engineer', 'Full Stack Developer'],
+    types: ['Technical', 'Mixed'],
+    category: 'Production Error Handling & Observability',
+    text: 'How do you implement client-side observability, error boundaries, and telemetry tracking to detect and diagnose production bugs before users report them?',
+    context: 'Discuss ErrorBoundary component lifecycle, Sentry or Datadog integrations, and session replay.',
+    hints: ['Explain React Error Boundaries catching render errors', 'Discuss source map uploads for de-obfuscation', 'Explain tracking custom breadcrumbs before an exception occurs']
   },
 
-  // System Design
+  // Backend & Distributed Systems
   {
-    roles: ['System Architect', 'Backend Engineer', 'Full Stack Developer', 'Engineering Manager / Lead'],
-    types: ['system_design', 'technical', 'mixed'],
-    levels: ['mid', 'senior', 'lead'],
-    category: 'Distributed Systems',
-    text: 'Design a real-time notification system capable of sending push alerts and in-app notifications to 10 million active users with sub-second latency.',
-    context: 'Cover ingestion, message broker choice, connection pooling (WebSockets/SSE), and persistence.',
-    sampleHints: [
-      'Identify backpressure and decoupling using Apache Kafka or RabbitMQ.',
-      'Explain WebSocket connection gateways with heartbeat management.',
-      'Discuss fan-out strategies for global announcements versus targeted user alerts.'
-    ],
-    keywords: ['WebSocket', 'Kafka', 'broker', 'fan-out', 'gateway', 'latency', 'horizontal scaling']
+    tags: ['Backend Engineer', 'Full Stack Developer', 'System Architect'],
+    types: ['Technical', 'Mixed'],
+    category: 'Database Concurrency & ACID',
+    text: 'How do you handle race conditions and maintain strict data consistency when handling high-concurrency balance deductions or ticket reservations in a relational database?',
+    context: 'Contrast optimistic locking (version numbers) with pessimistic locking (SELECT FOR UPDATE) and distributed locks.',
+    hints: ['Explain transaction isolation levels (Read Committed vs Serializable)', 'Compare optimistic versioning vs row-level locking', 'Discuss idempotency keys for client retries']
   },
   {
-    roles: ['System Architect', 'Backend Engineer', 'Full Stack Developer'],
-    types: ['system_design', 'technical', 'mixed'],
-    levels: ['mid', 'senior', 'lead'],
-    category: 'System Design & Storage',
-    text: 'How would you architect a URL shortening service like Bitly handling 1 billion URLs with a 100:1 read-to-write ratio?',
-    context: 'Estimate storage, discuss base62 encoding vs hashing, caching layers, and database sharding.',
-    sampleHints: [
-      'Calculate approximate QPS and multi-year storage needs.',
-      'Use a 6-7 character Base62 encoded distributed counter (Snowflake or Redis counter).',
-      'Add a Redis caching layer for the top 20% hottest URLs (80/20 rule).'
-    ],
-    keywords: ['base62', 'cache', 'Redis', 'sharding', 'read-heavy', 'snowflake', 'collision']
+    tags: ['Backend Engineer', 'System Architect', 'Full Stack Developer'],
+    types: ['Technical', 'Mixed'],
+    category: 'Distributed Caching & Redis',
+    text: 'Design a resilient distributed caching layer using Redis for a service with 100,000 read requests per second. How do you mitigate Cache Stampede (dog-piling) and Cache Penetration?',
+    context: 'Discuss TTL jitter, mutex locks, probabilistic early expiration, and Bloom filters.',
+    hints: ['Explain probabilistic early recomputation or distributed locks for stampede', 'Use Bloom filters for non-existent keys', 'Discuss Redis cluster sentinel and read replicas']
   },
-
-  // DevOps & Cloud
   {
-    roles: ['DevOps / Cloud Engineer', 'System Architect', 'Full Stack Developer'],
-    types: ['technical', 'mixed'],
-    levels: ['junior', 'mid', 'senior', 'lead'],
-    category: 'CI/CD & Reliability',
-    text: 'Describe how you would implement a zero-downtime deployment strategy (e.g., Blue-Green or Canary) in a containerized environment with automated rollback on failure.',
-    context: 'Focus on health checks, traffic routing, database migrations, and telemetry alerts.',
-    sampleHints: [
-      'Explain routing gradual traffic percentages via ingress controllers or load balancers.',
-      'Emphasize backwards-compatible database schema migrations (expand and contract pattern).',
-      'Set automated metric triggers (e.g., 5xx error spikes or latency threshold breaches) for instant rollback.'
-    ],
-    keywords: ['blue-green', 'canary', 'zero downtime', 'health check', 'rollback', 'schema migration']
+    tags: ['Backend Engineer', 'Full Stack Developer', 'API Design'],
+    types: ['Technical', 'Mixed'],
+    category: 'Rate Limiting & Resiliency',
+    text: 'Explain how you would architect a distributed rate limiter supporting 50,000 RPM across multiple microservice replicas. Which rate limiting algorithm would you pick and why?',
+    context: 'Compare Token Bucket, Leaky Bucket, and Sliding Window Counter in Redis.',
+    hints: ['Sliding Window Counter offers smooth accuracy without burst spikes', 'Redis Lua scripts ensure atomic increments', 'Address fail-open strategy if Redis fails']
+  },
+  {
+    tags: ['Backend Engineer', 'DevOps & Cloud Engineer', 'System Architect'],
+    types: ['Technical', 'Mixed'],
+    category: 'Message Queues & Asynchronous Processing',
+    text: 'When designing an event-driven asynchronous processing pipeline with message brokers (such as Kafka or RabbitMQ), how do you guarantee idempotency and handle poison pill messages?',
+    context: 'Discuss Dead Letter Queues (DLQ), retry backoff with jitter, and deduplication IDs.',
+    hints: ['Dead Letter Queues isolate repeatedly failing payloads', 'Idempotency keys ensure repeated processing causes no side effects', 'Exponential backoff prevents thundering herds']
   },
 
-  // Behavioral
+  // HR & Culture & Behavioural
   {
-    roles: ['Frontend Engineer', 'Backend Engineer', 'Full Stack Developer', 'System Architect', 'DevOps / Cloud Engineer', 'AI / Machine Learning Engineer', 'Engineering Manager / Lead', 'Other / Custom Role'],
-    types: ['behavioral', 'mixed'],
-    levels: ['junior', 'mid', 'senior', 'lead'],
-    category: 'Behavioral & Engineering Collaboration',
-    text: 'Tell me about a time you strongly disagreed with a product manager or senior engineer on a technical or architectural decision. How did you handle the situation and what was the outcome?',
-    context: 'Use the STAR method: Situation, Task, Action, Result. Highlight data-driven communication and empathy.',
-    sampleHints: [
-      'Focus on objective business trade-offs rather than emotional friction.',
-      'Explain how you built a prototype, benchmarked data, or compromised effectively.',
-      'Reflect on what you learned from the experience.'
-    ],
-    keywords: ['disagreement', 'compromise', 'data-driven', 'trade-off', 'communication', 'result']
+    tags: ['Frontend Developer', 'Backend Engineer', 'Full Stack Developer', 'Engineering Manager', 'General'],
+    types: ['HR', 'Behavioural', 'Mixed'],
+    category: 'Collaboration & Stakeholder Alignment',
+    text: 'Describe a situation where engineering constraints clashed with product deadlines or stakeholder expectations. How did you negotiate scope and communicate trade-offs?',
+    context: 'Structure your response using the STAR format (Situation, Task, Action, Result).',
+    hints: ['Focus on business impact and data-driven compromises', 'Explain presenting tiered options (MVP vs Phase 2)', 'Highlight collaborative outcomes']
   },
   {
-    roles: ['Frontend Engineer', 'Backend Engineer', 'Full Stack Developer', 'System Architect', 'DevOps / Cloud Engineer', 'AI / Machine Learning Engineer', 'Engineering Manager / Lead', 'Other / Custom Role'],
-    types: ['behavioral', 'mixed'],
-    levels: ['junior', 'mid', 'senior', 'lead'],
-    category: 'Incident Management & Accountability',
-    text: 'Walk me through a high-severity production outage or bug that you caused or had to urgently triage. How did you mitigate it, communicate with stakeholders, and prevent recurrence?',
-    context: 'Focus on blameless postmortems, root cause analysis, and preventative observability.',
-    sampleHints: [
-      'Detail the immediate triage steps taken to restore service first before hunting perfection.',
-      'Describe honest, clear stakeholder communication.',
-      'Explain concrete preventive actions implemented in the postmortem (e.g. tests, alerts, safeguards).'
-    ],
-    keywords: ['outage', 'triage', 'postmortem', 'root cause', 'mitigation', 'observability', 'monitoring']
+    tags: ['Frontend Developer', 'Backend Engineer', 'Full Stack Developer', 'General'],
+    types: ['HR', 'Behavioural', 'Mixed'],
+    category: 'High-Severity Incident Management',
+    text: 'Walk me through a production incident or severe bug that you were responsible for or led the resolution of. How did you triage, resolve it, and conduct the blameless post-mortem?',
+    context: 'Focus on communication during downtime and concrete preventative engineering safeguards.',
+    hints: ['Prioritize service restoration over immediate blame', 'Explain transparent status communication to stakeholders', 'Detail preventative tests, alerts, and runbooks established afterward']
   },
   {
-    roles: ['Frontend Engineer', 'Backend Engineer', 'Full Stack Developer', 'System Architect', 'Engineering Manager / Lead', 'Other / Custom Role'],
-    types: ['behavioral', 'mixed'],
-    levels: ['mid', 'senior', 'lead'],
+    tags: ['Frontend Developer', 'Backend Engineer', 'Full Stack Developer', 'General'],
+    types: ['HR', 'Behavioural', 'Mixed'],
     category: 'Technical Debt & Prioritization',
-    text: 'How do you balance delivering immediate customer features with maintaining high code quality and paying down compounding technical debt?',
-    context: 'Discuss negotiation with leadership, allocating dedicated tech debt budgets, and test coverage.',
-    sampleHints: [
-      'Mention dedicating a percentage of each sprint (e.g., 15-20%) to maintenance and tech debt.',
-      'Frame technical debt in terms of developer velocity, incident risk, and customer churn.',
-      'Explain the "Boy Scout Rule" (leave the codebase cleaner than you found it).'
-    ],
-    keywords: ['technical debt', 'velocity', 'sprint allocation', 'refactoring', 'prioritization', 'trade-off']
+    text: 'How do you proactively identify, advocate for, and remediate technical debt when business roadmaps heavily emphasize shipping new client-facing features?',
+    context: 'Discuss sprint budget allocation, developer velocity metrics, and the Boy Scout rule.',
+    hints: ['Quantify technical debt in terms of incident risk and developer cycle time', 'Advocate for a consistent 15-20% engineering health allocation per sprint', 'Lead incremental refactoring during feature work']
+  },
+  {
+    tags: ['Frontend Developer', 'Backend Engineer', 'Engineering Manager', 'General'],
+    types: ['HR', 'Behavioural', 'Mixed'],
+    category: 'Mentorship & Code Review Standards',
+    text: 'What is your approach to conducting constructive code reviews? How do you mentor junior/mid-level teammates without causing delivery friction?',
+    context: 'Discuss architectural standards, automated linting, empathy, and distinguishing preferences from bugs.',
+    hints: ['Automate style debates via linters/formatters', 'Distinguish blocking defects from non-blocking suggestions (nitpicks)', 'Offer pair programming for complex architectural shifts']
   }
 ];
 
-export function generateQuestionsForSession(config: InterviewConfig): InterviewQuestion[] {
-  // Filter questions matching role or generic
-  const targetRole = config.role === 'Other / Custom Role' ? (config.customRole || 'Software Engineer') : config.role;
-  
-  let matching = QUESTION_BANK.filter(q => {
+export function generateQuestionsForJob(jobConfig: JobConfiguration): InterviewQuestion[] {
+  const targetCount = jobConfig.questionCount || 5;
+  const jobTitle = jobConfig.jobTitle.toLowerCase();
+  const reqSkills = jobConfig.requiredSkills.map(s => s.toLowerCase());
+
+  // Match questions based on tags, interview type, and skills
+  let matching = MASTER_QUESTION_BANK.filter(q => {
     // Type match
-    if (config.interviewType !== 'mixed' && !q.types.includes(config.interviewType)) {
+    if (jobConfig.interviewType !== 'Mixed' && !q.types.includes(jobConfig.interviewType)) {
       return false;
     }
-    // Level match
-    if (!q.levels.includes(config.level)) {
-      return false;
-    }
-    // Role match
-    const roleMatches = q.roles.includes(config.role) || q.roles.includes('Other / Custom Role');
-    return roleMatches;
+    // Tag match
+    const tagMatch = q.tags.some(t => {
+      const lowerT = t.toLowerCase();
+      return jobTitle.includes(lowerT) || reqSkills.some(s => s.includes(lowerT) || lowerT.includes(s)) || lowerT === 'general';
+    });
+    return tagMatch;
   });
 
-  // Fallback if not enough matching
-  if (matching.length < config.questionCount) {
-    const fallbacks = QUESTION_BANK.filter(q => !matching.includes(q));
-    matching = [...matching, ...fallbacks];
+  // If we don't have enough exact matches, widen to any question matching interview type
+  if (matching.length < targetCount) {
+    const typeMatching = MASTER_QUESTION_BANK.filter(q => 
+      !matching.includes(q) && (jobConfig.interviewType === 'Mixed' || q.types.includes(jobConfig.interviewType))
+    );
+    matching = [...matching, ...typeMatching];
   }
 
-  // Shuffle slightly and select requested count
-  const selected = matching.slice(0, config.questionCount);
+  // If still not enough, add general questions from the bank
+  if (matching.length < targetCount) {
+    const remaining = MASTER_QUESTION_BANK.filter(q => !matching.includes(q));
+    matching = [...matching, ...remaining];
+  }
 
-  return selected.map((q, index) => ({
-    id: `q-${index + 1}-${Math.random().toString(36).substring(2, 7)}`,
-    questionNumber: index + 1,
-    text: q.text,
-    category: q.category,
-    context: q.context,
-    sampleHints: q.sampleHints,
-    expectedKeywords: q.keywords,
-  }));
+  // If requested count exceeds unique bank items, generate dynamic topic-specific questions
+  const selected: InterviewQuestion[] = [];
+  for (let i = 0; i < targetCount; i++) {
+    if (i < matching.length) {
+      const q = matching[i];
+      selected.push({
+        id: `q-${i + 1}-${Math.random().toString(36).substring(2, 7)}`,
+        questionNumber: i + 1,
+        text: q.text,
+        category: q.category,
+        context: q.context,
+        sampleHints: q.hints,
+      });
+    } else {
+      // Dynamic fallback for high question count (e.g. 10+)
+      const skill = jobConfig.requiredSkills[i % jobConfig.requiredSkills.length] || 'software architecture';
+      selected.push({
+        id: `q-${i + 1}-${Math.random().toString(36).substring(2, 7)}`,
+        questionNumber: i + 1,
+        text: `In the context of ${jobConfig.jobTitle}, explain your hands-on experience and best practices when implementing ${skill}. What are the primary trade-offs you encounter?`,
+        category: `${skill} Deep Dive`,
+        context: `Focus on architectural choices, maintainability, and real-world failure modes.`,
+        sampleHints: [
+          `Detail your architectural reasoning with ${skill}`,
+          `Explain performance and scalability implications`,
+          `Describe a specific production lesson or edge case you handled`
+        ]
+      });
+    }
+  }
+
+  return selected;
 }
 
-export function evaluateMockSession(
-  config: InterviewConfig,
-  answers: CandidateAnswer[],
-  questions: InterviewQuestion[]
-): InterviewScore {
-  let totalLengthScore = 0;
-  let totalKeywordMatches = 0;
-  let totalKeywordsPossible = 0;
+export function generateRecruiterEvaluation(
+  jobConfig: JobConfiguration,
+  candidateName: string,
+  answers: CandidateAnswer[]
+): RecruiterEvaluation {
+  const totalWords = answers.reduce((sum, a) => sum + a.answerText.trim().split(/\s+/).filter(Boolean).length, 0);
+  const avgWords = answers.length > 0 ? Math.round(totalWords / answers.length) : 0;
 
-  answers.forEach((ans, idx) => {
-    const q = questions[idx];
-    const words = ans.answerText.trim().split(/\s+/).filter(Boolean).length;
-    
-    // Word count assessment (ideal: 40 - 150 words per question)
-    const lengthScore = Math.min(100, Math.max(30, words * 1.2));
-    totalLengthScore += lengthScore;
+  let technicalCompetency: RecruiterEvaluation['technicalCompetency'] = 'Strong';
+  let communicationClarity: RecruiterEvaluation['communicationClarity'] = 'Clear & Structured';
+  let recommendation: RecruiterEvaluation['recommendation'] = 'Advance to Technical Final';
 
-    if (q?.expectedKeywords) {
-      totalKeywordsPossible += q.expectedKeywords.length;
-      const lower = ans.answerText.toLowerCase();
-      const matches = q.expectedKeywords.filter(k => lower.includes(k.toLowerCase())).length;
-      totalKeywordMatches += matches;
-    }
-  });
-
-  const avgLengthScore = answers.length > 0 ? Math.round(totalLengthScore / answers.length) : 60;
-  const keywordRatio = totalKeywordsPossible > 0 ? (totalKeywordMatches / totalKeywordsPossible) : 0.6;
-  const keywordScore = Math.round(Math.min(98, Math.max(50, keywordRatio * 100 + 35)));
-
-  const technicalDepth = Math.min(96, Math.max(65, Math.round((avgLengthScore * 0.4) + (keywordScore * 0.6))));
-  const communication = Math.min(95, Math.max(60, Math.round(avgLengthScore * 0.9 + 8)));
-  const problemSolving = Math.min(94, Math.max(65, Math.round((technicalDepth + communication) / 2 - 2)));
-  
-  const overall = Math.round((technicalDepth * 0.4) + (communication * 0.3) + (problemSolving * 0.3));
-
-  const strengths: string[] = [];
-  const improvements: string[] = [];
-
-  if (communication >= 80) {
-    strengths.push('Articulated thoughts clearly with structured, professional tone.');
-  } else {
-    strengths.push('Direct responses that addressed the core prompt.');
-    improvements.push('Elaborate more on specific implementation details and real-world examples.');
-  }
-
-  if (technicalDepth >= 80) {
-    strengths.push('Demonstrated strong domain knowledge and awareness of trade-offs.');
-  } else {
-    improvements.push('Incorporate standard architectural terminology (e.g. latency, idempotency, caching).');
-  }
-
-  if (problemSolving >= 80) {
-    strengths.push('Methodical problem breakdown with practical mitigation strategies.');
-  } else {
-    improvements.push('Consider edge cases and failure modes proactively when answering.');
+  if (avgWords < 30) {
+    technicalCompetency = 'Needs Review';
+    communicationClarity = 'Too Brief';
+    recommendation = 'Hold for Review';
+  } else if (avgWords >= 70) {
+    technicalCompetency = 'Exceptional';
+    communicationClarity = 'Clear & Structured';
+    recommendation = 'Advance to Technical Final';
   }
 
   return {
-    overall,
-    communication,
-    technicalDepth,
-    problemSolving,
-    summary: `Solid mock interview session for ${config.role} (${config.level.toUpperCase()} level). Answered ${answers.length} question(s) covering ${config.topics.slice(0, 3).join(', ')}.`,
-    strengths,
-    improvements,
+    overallAssessment: `Candidate completed all ${answers.length} questions for the ${jobConfig.seniorityLevel} ${jobConfig.jobTitle} position (${jobConfig.interviewType} focus). Average response depth was ${avgWords} words per question.`,
+    technicalCompetency,
+    communicationClarity,
+    notableStrengths: [
+      `Systematic approach to ${jobConfig.requiredSkills.slice(0, 3).join(', ')} requirements`,
+      `Articulated architectural trade-offs with practical engineering mindset`,
+      `Demonstrated consistent professional tone throughout the session`
+    ],
+    areasToProbeInLiveRound: [
+      `Probe deeper into edge cases and live failure recovery in a collaborative whiteboard session`,
+      `Verify hands-on debugging skills with live code snippet review`
+    ],
+    recommendation,
+    evaluationGeneratedAt: new Date().toISOString()
   };
 }

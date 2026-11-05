@@ -1,261 +1,404 @@
-import { InterviewSession, InterviewConfig } from '@/types/interview';
+import { 
+  InterviewInvitation, 
+  JobConfiguration, 
+  LinkConfiguration, 
+  CandidateInfo, 
+  CandidateAnswer, 
+  RecruiterDashboardMetrics 
+} from '@/types/interview';
+import { generateQuestionsForJob, generateRecruiterEvaluation } from '@/lib/mockData';
 
-const ACTIVE_SESSION_KEY = 'intervue_ai_active_session';
-const HISTORY_KEY = 'intervue_ai_history';
+const RECRUITER_INTERVIEWS_KEY = 'intervue_recruiter_interviews';
 
-export const SEEDED_SESSIONS: InterviewSession[] = [
+export const SEEDED_RECRUITER_INTERVIEWS: InterviewInvitation[] = [
   {
-    id: 'seed-sess-1',
-    config: {
-      candidateName: 'Alex Mercer',
-      role: 'Frontend Engineer',
-      level: 'senior',
-      interviewType: 'technical',
-      difficulty: 'medium',
-      topics: ['React', 'Next.js', 'Web Performance'],
+    id: 'intv-sample-completed-1',
+    token: 'eval-demo-completed-88',
+    jobConfig: {
+      jobTitle: 'Frontend Developer',
+      jobDescription: 'Seeking an experienced Frontend Developer with deep React, Next.js, and TypeScript expertise to lead customer dashboard development.',
+      requiredSkills: ['React', 'Next.js', 'TypeScript', 'Web Vitals', 'Tailwind CSS'],
+      requiredExperience: '3-5 years',
+      seniorityLevel: 'Senior',
+      interviewType: 'Technical',
+      difficulty: 'Intermediate',
       questionCount: 3,
+      expectedDurationMinutes: 30,
+      language: 'English',
     },
+    linkConfig: {
+      expiration: '48 hours',
+    },
+    createdAt: '2026-11-03T09:00:00.000Z',
+    expiresAt: '2026-11-05T09:00:00.000Z',
     status: 'completed',
-    createdAt: '2026-11-03T10:00:00.000Z',
-    completedAt: '2026-11-03T10:20:00.000Z',
-    totalTimeSeconds: 780,
-    currentQuestionIndex: 3,
+    candidate: {
+      fullName: 'Sarah Jenkins',
+      email: 'sarah.jenkins@example.com',
+      startedAt: '2026-11-03T11:00:00.000Z',
+    },
+    completedAt: '2026-11-03T11:24:00.000Z',
+    totalDurationSeconds: 1440,
     questions: [
       {
         id: 'q-seed-1',
         questionNumber: 1,
-        text: 'How do Next.js Server Components differ from traditional Client Components, and when would you choose one over the other in a high-traffic production application?',
-        category: 'React & Core Architecture',
-        sampleHints: ['Hydration costs', 'Server data access']
+        text: 'How do Next.js Server Components differ from Client Components, and what factors determine whether a component should be rendered on the server versus client?',
+        category: 'Architecture & Hydration',
+        context: 'Think about hydration cost, bundle size, and user interactivity.',
       },
       {
         id: 'q-seed-2',
         questionNumber: 2,
-        text: 'A user reports that a critical dashboard page in your application feels sluggish. How do you diagnose and optimize Core Web Vitals?',
-        category: 'Web Performance',
-        sampleHints: ['LCP, INP, CLS profiling', 'DevTools']
+        text: 'A user reports that a critical page in your application feels sluggish and shifts during initial render. How do you diagnose and optimize Core Web Vitals (LCP, INP, CLS)?',
+        category: 'Web Performance & Core Vitals',
+        context: 'Focus on profiling tools, font/image loading optimizations, and render lifecycle.',
       },
       {
         id: 'q-seed-3',
         questionNumber: 3,
-        text: 'Explain how React handles re-renders and how you prevent unnecessary re-computations.',
-        category: 'State Management & Concurrency',
-        sampleHints: ['useMemo', 'useCallback']
+        text: 'Explain how React handles render tree updates. How do you prevent unnecessary re-computations when passing complex objects or callbacks down a component tree?',
+        category: 'State Management & Re-renders',
+        context: 'Discuss referential equality, useMemo, useCallback, and state colocation.',
       }
     ],
     answers: [
       {
         questionId: 'q-seed-1',
         questionText: 'Server Components vs Client Components',
-        answerText: 'Server components execute entirely on the server and send pre-rendered HTML/JSON over the wire, removing client bundle overhead and eliminating waterfalls.',
-        timeSpentSeconds: 240,
-        submittedAt: '2026-11-03T10:04:00.000Z'
+        answerText: 'Server components execute only on the server, removing heavy dependencies from the client bundle and fetching data directly next to database layers without client waterfalls. Client components are reserved strictly for interactive state, effects, and DOM listeners.',
+        timeSpentSeconds: 420,
+        submittedAt: '2026-11-03T11:07:00.000Z'
       },
       {
         questionId: 'q-seed-2',
-        questionText: 'Web Performance & Core Web Vitals',
-        answerText: 'I use Lighthouse and Chrome DevTools to measure LCP and CLS. I optimize hero assets with priority loading, reduce JS blocking time, and ensure reserved layout dimensions.',
-        timeSpentSeconds: 300,
-        submittedAt: '2026-11-03T10:09:00.000Z'
+        questionText: 'Core Web Vitals Optimization',
+        answerText: 'I diagnose using Chrome DevTools Performance panel and Lighthouse. For LCP, I ensure hero images use priority preloading and SSR. For CLS, I enforce explicit image dimensions and avoid inserting dynamic content above the fold.',
+        timeSpentSeconds: 510,
+        submittedAt: '2026-11-03T11:15:30.000Z'
       },
       {
         questionId: 'q-seed-3',
-        questionText: 'Preventing unnecessary re-computations',
-        answerText: 'I keep state colocated close to consumers. For heavy derivations, useMemo caches results. Callbacks passed to pure components are stabilized with useCallback.',
-        timeSpentSeconds: 240,
-        submittedAt: '2026-11-03T10:13:00.000Z'
+        questionText: 'State Management and Re-renders',
+        answerText: 'I prioritize state colocation so updates only re-render the components that actually consume that state. When passing functions or complex derivations down to memoized children, I stabilize references using useCallback and useMemo.',
+        timeSpentSeconds: 510,
+        submittedAt: '2026-11-03T11:24:00.000Z'
       }
     ],
-    score: {
-      overall: 88,
-      communication: 90,
-      technicalDepth: 86,
-      problemSolving: 88,
-      summary: 'Excellent technical clarity and practical grasp of React Server Components and modern web performance tuning.',
-      strengths: ['Clear explanation of hydration boundaries', 'Hands-on performance diagnosis techniques'],
-      improvements: ['Discuss streaming SSR and Suspense boundaries in more depth']
+    recruiterReport: {
+      overallAssessment: 'Candidate completed all 3 questions for the Senior Frontend Developer position with clear technical depth and strong architectural communication.',
+      technicalCompetency: 'Strong',
+      communicationClarity: 'Clear & Structured',
+      notableStrengths: [
+        'Nuanced understanding of React Server Components and hydration boundaries',
+        'Demonstrated practical knowledge of Core Web Vitals (LCP & CLS)',
+        'Clear focus on state colocation and referential stability'
+      ],
+      areasToProbeInLiveRound: [
+        'Test live hands-on refactoring of an unoptimized component tree',
+        'Explore experience with Next.js parallel and intercepting routes'
+      ],
+      recommendation: 'Advance to Technical Final',
+      evaluationGeneratedAt: '2026-11-03T11:24:05.000Z'
     }
   },
   {
-    id: 'seed-sess-2',
-    config: {
-      candidateName: 'Alex Mercer',
-      role: 'Backend Engineer',
-      level: 'senior',
-      interviewType: 'system_design',
-      difficulty: 'hard',
-      topics: ['Distributed Systems', 'Databases & SQL', 'Microservices'],
-      questionCount: 3,
+    id: 'intv-sample-active-2',
+    token: 'active-react-link-77',
+    jobConfig: {
+      jobTitle: 'Senior React Engineer',
+      jobDescription: 'Lead our web platform architecture and design system implementation using modern React 19 and Next.js.',
+      requiredSkills: ['React 19', 'Next.js App Router', 'Server Components', 'TypeScript', 'Design Systems'],
+      requiredExperience: '5+ years',
+      seniorityLevel: 'Senior',
+      interviewType: 'Technical',
+      difficulty: 'Advanced',
+      questionCount: 5,
+      expectedDurationMinutes: 45,
+      language: 'English',
     },
-    status: 'completed',
-    createdAt: '2026-10-31T14:00:00.000Z',
-    completedAt: '2026-10-31T14:25:00.000Z',
-    totalTimeSeconds: 960,
-    currentQuestionIndex: 3,
+    linkConfig: {
+      expiration: '24 hours',
+    },
+    createdAt: '2026-11-05T08:00:00.000Z',
+    expiresAt: '2026-11-06T08:00:00.000Z',
+    status: 'active',
     questions: [
       {
-        id: 'q-seed-4',
+        id: 'q-act-1',
         questionNumber: 1,
-        text: 'How do you prevent race conditions and maintain data consistency when handling concurrent ticket purchases?',
-        category: 'Database & Data Consistency'
+        text: 'How do Next.js Server Components differ from Client Components, and what factors determine whether a component should be rendered on the server versus client?',
+        category: 'Architecture & Hydration'
       },
       {
-        id: 'q-seed-5',
+        id: 'q-act-2',
         questionNumber: 2,
-        text: 'Design a resilient rate-limiting mechanism for a public API that receives 50,000 requests per minute.',
-        category: 'API Design & Scaling'
+        text: 'A user reports that a critical page in your application feels sluggish. How do you diagnose and optimize Core Web Vitals?',
+        category: 'Web Performance'
       },
       {
-        id: 'q-seed-6',
+        id: 'q-act-3',
         questionNumber: 3,
-        text: 'Explain the security trade-offs between storing session state via JWT tokens in client cookies versus Redis sessions.',
-        category: 'Security & Authentication'
-      }
-    ],
-    answers: [
-      {
-        questionId: 'q-seed-4',
-        questionText: 'Preventing race conditions',
-        answerText: 'I implement optimistic locking with version numbers for high-throughput scenarios, or pessimistic SELECT FOR UPDATE within an ACID transaction when overbooking is strictly zero-tolerance.',
-        timeSpentSeconds: 310,
-        submittedAt: '2026-10-31T14:05:00.000Z'
+        text: 'Explain how React handles render tree updates and prevents unnecessary re-renders.',
+        category: 'State Management'
       },
       {
-        questionId: 'q-seed-5',
-        questionText: 'Resilient rate-limiting mechanism',
-        answerText: 'I would use a sliding window log or token bucket algorithm hosted in Redis. To avoid latency bottlenecks, Redis cluster instances run with local memory fallback and fail-open policies.',
-        timeSpentSeconds: 340,
-        submittedAt: '2026-10-31T14:11:00.000Z'
+        id: 'q-act-4',
+        questionNumber: 4,
+        text: 'How do you structure responsive CSS architectures in enterprise design systems to avoid layout thrashing?',
+        category: 'Design Systems & CSS'
       },
       {
-        questionId: 'q-seed-6',
-        questionText: 'JWT vs Server sessions',
-        answerText: 'Stateless JWTs eliminate DB lookups for authorization but make instant revocation impossible without a blacklist. Redis sessions offer instant invalidation at the cost of network hops.',
-        timeSpentSeconds: 310,
-        submittedAt: '2026-10-31T14:16:00.000Z'
+        id: 'q-act-5',
+        questionNumber: 5,
+        text: 'How do you implement client-side observability and error boundaries in enterprise applications?',
+        category: 'Observability & Stability'
       }
     ],
-    score: {
-      overall: 92,
-      communication: 92,
-      technicalDepth: 94,
-      problemSolving: 90,
-      summary: 'Superb architecture knowledge with practical awareness of trade-offs between Redis and stateless JWTs.',
-      strengths: ['Nuanced discussion of transaction isolation', 'Strong fault-tolerance mindset with rate limiters'],
-      improvements: ['Could mention Lua scripts for atomic Redis token bucket operations']
-    }
+    answers: []
+  },
+  {
+    id: 'intv-sample-expired-3',
+    token: 'expired-devops-link-12',
+    jobConfig: {
+      jobTitle: 'DevOps & Cloud Engineer',
+      jobDescription: 'Automate multi-cloud Kubernetes clusters and CI/CD deployment pipelines.',
+      requiredSkills: ['Docker', 'Kubernetes', 'AWS', 'Terraform', 'Prometheus'],
+      requiredExperience: '3-5 years',
+      seniorityLevel: 'Mid-level',
+      interviewType: 'Technical',
+      difficulty: 'Intermediate',
+      questionCount: 3,
+      expectedDurationMinutes: 30,
+      language: 'English',
+    },
+    linkConfig: {
+      expiration: '24 hours',
+    },
+    createdAt: '2026-11-01T10:00:00.000Z',
+    expiresAt: '2026-11-02T10:00:00.000Z',
+    status: 'expired',
+    questions: [],
+    answers: []
   }
 ];
 
-export function getActiveSession(): InterviewSession | null {
-  if (typeof window === 'undefined') return null;
+export function getInterviews(): InterviewInvitation[] {
+  if (typeof window === 'undefined') return SEEDED_RECRUITER_INTERVIEWS;
   try {
-    const raw = localStorage.getItem(ACTIVE_SESSION_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch (e) {
-    console.error('Error reading active session from localStorage', e);
-    return null;
-  }
-}
-
-export function setActiveSession(session: InterviewSession | null): void {
-  if (typeof window === 'undefined') return;
-  try {
-    if (session) {
-      localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(session));
-    } else {
-      localStorage.removeItem(ACTIVE_SESSION_KEY);
-    }
-  } catch (e) {
-    console.error('Error saving active session to localStorage', e);
-  }
-}
-
-export function getInterviewHistory(): InterviewSession[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = localStorage.getItem(HISTORY_KEY);
+    const raw = localStorage.getItem(RECRUITER_INTERVIEWS_KEY);
     if (!raw) {
-      // Seed with sample data on first visit
-      localStorage.setItem(HISTORY_KEY, JSON.stringify(SEEDED_SESSIONS));
-      return SEEDED_SESSIONS;
+      localStorage.setItem(RECRUITER_INTERVIEWS_KEY, JSON.stringify(SEEDED_RECRUITER_INTERVIEWS));
+      return SEEDED_RECRUITER_INTERVIEWS;
     }
-    return JSON.parse(raw);
-  } catch (e) {
-    console.error('Error reading interview history', e);
-    return SEEDED_SESSIONS;
+    const parsed: InterviewInvitation[] = JSON.parse(raw);
+    
+    // Automatically flag expired interviews based on current time
+    const now = Date.now();
+    let hasChanges = false;
+    const checked = parsed.map(inv => {
+      if (inv.status === 'active' && new Date(inv.expiresAt).getTime() < now) {
+        hasChanges = true;
+        return { ...inv, status: 'expired' as const };
+      }
+      return inv;
+    });
+
+    if (hasChanges) {
+      localStorage.setItem(RECRUITER_INTERVIEWS_KEY, JSON.stringify(checked));
+    }
+    return checked;
+  } catch (err) {
+    console.error('Error loading recruiter interviews', err);
+    return SEEDED_RECRUITER_INTERVIEWS;
   }
 }
 
-export function saveCompletedSession(session: InterviewSession): void {
+export function saveInterviews(interviews: InterviewInvitation[]): void {
   if (typeof window === 'undefined') return;
   try {
-    const history = getInterviewHistory();
-    // Prepend new session
-    const updated = [session, ...history.filter(s => s.id !== session.id)];
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
-    // Clear active session
-    localStorage.removeItem(ACTIVE_SESSION_KEY);
-  } catch (e) {
-    console.error('Error saving completed session', e);
+    localStorage.setItem(RECRUITER_INTERVIEWS_KEY, JSON.stringify(interviews));
+  } catch (err) {
+    console.error('Error saving recruiter interviews', err);
   }
 }
 
-export function deleteSessionFromHistory(id: string): InterviewSession[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const history = getInterviewHistory();
-    const updated = history.filter(s => s.id !== id);
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
-    return updated;
-  } catch (e) {
-    console.error('Error deleting session', e);
-    return [];
+export function getInterviewByToken(token: string): InterviewInvitation | null {
+  const interviews = getInterviews();
+  const found = interviews.find(i => i.token.trim().toLowerCase() === token.trim().toLowerCase());
+  if (!found) return null;
+
+  // Check if active but expired
+  if (found.status === 'active' && new Date(found.expiresAt).getTime() < Date.now()) {
+    found.status = 'expired';
+    saveInterviews(interviews);
   }
+
+  return found;
 }
 
-export function getDashboardMetrics(history: InterviewSession[]) {
-  const completed = history.filter(s => s.status === 'completed');
-  const totalCount = completed.length;
+export function getInterviewById(id: string): InterviewInvitation | null {
+  const interviews = getInterviews();
+  return interviews.find(i => i.id === id) || null;
+}
+
+export function createInterview(
+  jobConfig: JobConfiguration,
+  linkConfig: LinkConfiguration
+): InterviewInvitation {
+  const interviews = getInterviews();
   
-  if (totalCount === 0) {
-    return {
-      totalCount: 0,
-      averageScore: 0,
-      totalPracticeMinutes: 0,
-      topRole: 'None',
-      latestScore: 0,
-    };
+  // Generate random 16-character alphanumeric token
+  const randomChars = Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 10);
+  const token = `inv-${randomChars}`;
+
+  // Calculate expiration
+  const now = Date.now();
+  let durationMs = 24 * 60 * 60 * 1000; // 24 hours default
+  if (linkConfig.expiration === '48 hours') {
+    durationMs = 48 * 60 * 60 * 1000;
+  } else if (linkConfig.expiration === '7 days') {
+    durationMs = 7 * 24 * 60 * 60 * 1000;
   }
 
-  const scoreSum = completed.reduce((acc, s) => acc + (s.score?.overall || 0), 0);
-  const averageScore = Math.round(scoreSum / totalCount);
+  const createdAt = new Date(now).toISOString();
+  const expiresAt = new Date(now + durationMs).toISOString();
 
-  const totalTimeSeconds = completed.reduce((acc, s) => acc + (s.totalTimeSeconds || 600), 0);
-  const totalPracticeMinutes = Math.round(totalTimeSeconds / 60);
+  // Generate tailored questions
+  const questions = generateQuestionsForJob(jobConfig);
 
-  // Find top practiced role
-  const roleCounts: Record<string, number> = {};
-  completed.forEach(s => {
-    const r = s.config.role;
-    roleCounts[r] = (roleCounts[r] || 0) + 1;
-  });
-  let topRole = 'Software Engineer';
-  let maxCount = 0;
-  for (const [role, count] of Object.entries(roleCounts)) {
-    if (count > maxCount) {
-      maxCount = count;
-      topRole = role;
+  const newInvitation: InterviewInvitation = {
+    id: `intv-${now.toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
+    token,
+    jobConfig,
+    linkConfig,
+    createdAt,
+    expiresAt,
+    status: 'active',
+    questions,
+    answers: [],
+  };
+
+  const updated = [newInvitation, ...interviews];
+  saveInterviews(updated);
+  return newInvitation;
+}
+
+export function revokeInterview(id: string): void {
+  const interviews = getInterviews();
+  const updated = interviews.map(i => {
+    if (i.id === id && i.status !== 'completed') {
+      return { ...i, status: 'revoked' as const };
     }
+    return i;
+  });
+  saveInterviews(updated);
+}
+
+export function deleteInterview(id: string): void {
+  const interviews = getInterviews();
+  const updated = interviews.filter(i => i.id !== id);
+  saveInterviews(updated);
+}
+
+export function startCandidateInterview(token: string, candidate: CandidateInfo): InterviewInvitation | null {
+  const interviews = getInterviews();
+  const index = interviews.findIndex(i => i.token.trim().toLowerCase() === token.trim().toLowerCase());
+  if (index === -1) return null;
+
+  const target = interviews[index];
+  if (target.status !== 'active') return target;
+
+  target.status = 'in_progress';
+  target.candidate = {
+    ...candidate,
+    startedAt: new Date().toISOString(),
+  };
+
+  interviews[index] = target;
+  saveInterviews(interviews);
+  return target;
+}
+
+export function submitCandidateAnswer(
+  token: string,
+  questionId: string,
+  questionText: string,
+  answerText: string,
+  timeSpentSeconds: number
+): InterviewInvitation | null {
+  const interviews = getInterviews();
+  const index = interviews.findIndex(i => i.token.trim().toLowerCase() === token.trim().toLowerCase());
+  if (index === -1) return null;
+
+  const target = interviews[index];
+  const newAnswer: CandidateAnswer = {
+    questionId,
+    questionText,
+    answerText,
+    timeSpentSeconds,
+    submittedAt: new Date().toISOString(),
+  };
+
+  // Replace if existing or append
+  const existingIdx = target.answers.findIndex(a => a.questionId === questionId);
+  if (existingIdx >= 0) {
+    target.answers[existingIdx] = newAnswer;
+  } else {
+    target.answers.push(newAnswer);
   }
 
-  const latestScore = completed[0]?.score?.overall || 0;
+  interviews[index] = target;
+  saveInterviews(interviews);
+  return target;
+}
+
+export function completeCandidateInterview(token: string, totalSeconds: number): InterviewInvitation | null {
+  const interviews = getInterviews();
+  const index = interviews.findIndex(i => i.token.trim().toLowerCase() === token.trim().toLowerCase());
+  if (index === -1) return null;
+
+  const target = interviews[index];
+  target.status = 'completed';
+  target.completedAt = new Date().toISOString();
+  target.totalDurationSeconds = totalSeconds;
+
+  // Generate recruiter report
+  const candidateName = target.candidate?.fullName || 'Candidate';
+  target.recruiterReport = generateRecruiterEvaluation(target.jobConfig, candidateName, target.answers);
+
+  interviews[index] = target;
+  saveInterviews(interviews);
+  return target;
+}
+
+export function getRecruiterMetrics(interviews: InterviewInvitation[]): RecruiterDashboardMetrics {
+  const now = Date.now();
+  let totalCreated = interviews.length;
+  let activeLinks = 0;
+  let pendingInterviews = 0;
+  let completedInterviews = 0;
+  let expiredInterviews = 0;
+
+  interviews.forEach(inv => {
+    const isExpiredByTime = new Date(inv.expiresAt).getTime() < now;
+    if (inv.status === 'completed') {
+      completedInterviews++;
+    } else if (inv.status === 'expired' || (inv.status === 'active' && isExpiredByTime)) {
+      expiredInterviews++;
+    } else if (inv.status === 'active') {
+      activeLinks++;
+      pendingInterviews++;
+    } else if (inv.status === 'in_progress') {
+      pendingInterviews++;
+    }
+  });
 
   return {
-    totalCount,
-    averageScore,
-    totalPracticeMinutes,
-    topRole,
-    latestScore,
+    totalCreated,
+    activeLinks,
+    pendingInterviews,
+    completedInterviews,
+    expiredInterviews,
   };
 }

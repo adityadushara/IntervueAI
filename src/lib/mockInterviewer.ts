@@ -1,8 +1,8 @@
-import { InterviewConfig, InterviewQuestion, CandidateAnswer } from '@/types/interview';
+import { JobConfiguration, InterviewQuestion } from '@/types/interview';
 
-export function getGreetingMessage(config: InterviewConfig): string {
-  const roleName = config.role === 'Other / Custom Role' ? (config.customRole || 'Software Professional') : config.role;
-  return `Hello ${config.candidateName}! Welcome to your simulated interview for the ${config.level.toUpperCase()} ${roleName} role. Today we will go through ${config.questionCount} ${config.interviewType} questions. Take your time, explain your thought process clearly, and let's get started with your first question!`;
+export function getCandidateGreeting(jobConfig: JobConfiguration, candidateName: string): string {
+  const cleanName = candidateName.trim() || 'Candidate';
+  return `Hello ${cleanName}, welcome to your simulated interview for the ${jobConfig.seniorityLevel} ${jobConfig.jobTitle} position. Today's interview consists of ${jobConfig.questionCount} ${jobConfig.interviewType.toLowerCase()} questions and is designed to take approximately ${jobConfig.expectedDurationMinutes} minutes. Please take your time to structure your responses clearly. Let's start with your first question!`;
 }
 
 export function generateMockFeedbackForAnswer(
@@ -14,25 +14,16 @@ export function generateMockFeedbackForAnswer(
   const words = answerText.trim().split(/\s+/).filter(Boolean).length;
   
   const intros = [
-    "Thank you for sharing your perspective.",
-    "Understood. That's a thoughtful breakdown.",
-    "Good explanation. I appreciate how you addressed that.",
-    "Got it. You highlighted some key architectural considerations."
+    "Thank you. Your response has been noted and logged for the hiring team.",
+    "Got it. Thank you for walking through your thought process.",
+    "Understood. That provides good context on your technical approach.",
+    "Thank you for those details."
   ];
   const intro = intros[answerIndex % intros.length];
 
-  let commentary = '';
-  if (words < 20) {
-    commentary = "Your answer was concise. In a real technical interview, feel free to elaborate further with specific trade-offs or personal experiences.";
-  } else if (words < 60) {
-    commentary = "Solid points covering the core mechanics. Good focus on direct impact.";
-  } else {
-    commentary = "Very comprehensive answer! You clearly demonstrated familiarity with the domain and articulated the reasoning well.";
-  }
-
   const nextStep = answerIndex + 1 < totalQuestions 
     ? ` Let's move on to Question ${answerIndex + 2} of ${totalQuestions}.`
-    : ` That concludes our final question! Let me calculate your interview scorecard and breakdown now.`;
+    : ` That completes all questions for this session. Please submit your interview to finalize your assessment.`;
 
-  return `${intro} ${commentary}${nextStep}`;
+  return `${intro}${nextStep}`;
 }

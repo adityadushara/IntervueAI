@@ -1,18 +1,28 @@
-export type ExperienceLevel = 'junior' | 'mid' | 'senior' | 'lead';
+export type SeniorityLevel = 'Junior' | 'Mid-level' | 'Senior' | 'Lead / Staff' | 'Principal';
 
-export type InterviewType = 'technical' | 'behavioral' | 'system_design' | 'mixed';
+export type InterviewType = 'Technical' | 'HR' | 'Behavioural' | 'Mixed';
 
-export type InterviewDifficulty = 'easy' | 'medium' | 'hard';
+export type InterviewDifficulty = 'Beginner' | 'Intermediate' | 'Advanced';
 
-export interface InterviewConfig {
-  candidateName: string;
-  role: string;
-  customRole?: string;
-  level: ExperienceLevel;
+export type ExpirationOption = '24 hours' | '48 hours' | '7 days';
+
+export type InterviewStatus = 'active' | 'in_progress' | 'completed' | 'expired' | 'revoked';
+
+export interface JobConfiguration {
+  jobTitle: string;
+  jobDescription: string;
+  requiredSkills: string[];
+  requiredExperience: string; // e.g. "3-5 years"
+  seniorityLevel: SeniorityLevel;
   interviewType: InterviewType;
   difficulty: InterviewDifficulty;
-  topics: string[];
   questionCount: number;
+  expectedDurationMinutes: number;
+  language: string;
+}
+
+export interface LinkConfiguration {
+  expiration: ExpirationOption;
 }
 
 export interface InterviewQuestion {
@@ -31,35 +41,44 @@ export interface CandidateAnswer {
   answerText: string;
   timeSpentSeconds: number;
   submittedAt: string;
-  feedbackSnippet?: string;
 }
 
-export interface InterviewScore {
-  overall: number; // 0 - 100
-  communication: number; // 0 - 100
-  technicalDepth: number; // 0 - 100
-  problemSolving: number; // 0 - 100
-  summary: string;
-  strengths: string[];
-  improvements: string[];
+export interface CandidateInfo {
+  fullName: string;
+  email: string;
+  startedAt?: string;
 }
 
-export interface InterviewSession {
+export interface RecruiterEvaluation {
+  overallAssessment: string;
+  technicalCompetency: 'Exceptional' | 'Strong' | 'Satisfactory' | 'Needs Review';
+  communicationClarity: 'Clear & Structured' | 'Good' | 'Verbose' | 'Too Brief';
+  notableStrengths: string[];
+  areasToProbeInLiveRound: string[];
+  recommendation: 'Advance to Technical Final' | 'Hold for Review' | 'Schedule Follow-up' | 'Do Not Advance';
+  evaluationGeneratedAt: string;
+}
+
+export interface InterviewInvitation {
   id: string;
-  config: InterviewConfig;
-  status: 'in_progress' | 'completed' | 'abandoned';
+  token: string;
+  jobConfig: JobConfiguration;
+  linkConfig: LinkConfiguration;
   createdAt: string;
-  completedAt?: string;
-  totalTimeSeconds: number;
+  expiresAt: string;
+  status: InterviewStatus;
+  candidate?: CandidateInfo;
   questions: InterviewQuestion[];
   answers: CandidateAnswer[];
-  currentQuestionIndex: number;
-  score?: InterviewScore;
+  completedAt?: string;
+  totalDurationSeconds?: number;
+  recruiterReport?: RecruiterEvaluation;
 }
 
-export interface FormValidationErrors {
-  candidateName?: string;
-  role?: string;
-  customRole?: string;
-  topics?: string;
+export interface RecruiterDashboardMetrics {
+  totalCreated: number;
+  activeLinks: number;
+  pendingInterviews: number;
+  completedInterviews: number;
+  expiredInterviews: number;
 }

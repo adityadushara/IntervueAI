@@ -1,537 +1,621 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { 
-  User, 
   Briefcase, 
-  Sparkles, 
   Layers, 
-  HelpCircle, 
-  Check, 
-  AlertCircle, 
-  ArrowRight, 
-  Sliders, 
+  Clock, 
+  Sparkles, 
   Plus, 
-  X,
-  Zap,
-  Code
+  X, 
+  Check, 
+  Copy, 
+  ExternalLink, 
+  AlertCircle, 
+  ArrowRight,
+  ShieldCheck,
+  Calendar,
+  Globe,
+  Sliders
 } from 'lucide-react';
 import { 
-  InterviewConfig, 
-  ExperienceLevel, 
+  JobConfiguration, 
+  LinkConfiguration, 
+  SeniorityLevel, 
   InterviewType, 
-  InterviewDifficulty,
-  FormValidationErrors,
-  InterviewSession 
+  InterviewDifficulty, 
+  ExpirationOption,
+  InterviewInvitation 
 } from '@/types/interview';
-import { POPULAR_ROLES, DEFAULT_TOPICS_BY_ROLE, generateQuestionsForSession } from '@/lib/mockData';
-import { setActiveSession } from '@/lib/storage';
+import { SAMPLE_JOB_TITLES, DEFAULT_SKILLS_BY_ROLE } from '@/lib/mockData';
+import { createInterview } from '@/lib/storage';
 
-export default function ConfigPage() {
+export default function CreateInterviewPage() {
   const router = useRouter();
 
   // Form State
-  const [candidateName, setCandidateName] = useState('');
-  const [role, setRole] = useState<string>(POPULAR_ROLES[0]);
-  const [customRole, setCustomRole] = useState('');
-  const [level, setLevel] = useState<ExperienceLevel>('senior');
-  const [interviewType, setInterviewType] = useState<InterviewType>('technical');
-  const [difficulty, setDifficulty] = useState<InterviewDifficulty>('medium');
-  const [topics, setTopics] = useState<string[]>(DEFAULT_TOPICS_BY_ROLE[POPULAR_ROLES[0]] || []);
-  const [newTopicInput, setNewTopicInput] = useState('');
-  const [questionCount, setQuestionCount] = useState<number>(3);
-  
-  // Validation state
-  const [errors, setErrors] = useState<FormValidationErrors>({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [jobTitle, setJobTitle] = useState('Frontend Developer');
+  const [jobDescription, setJobDescription] = useState(
+    'We are seeking a Frontend Developer proficient in React, TypeScript, Next.js, and web performance optimization to engineer scalable interfaces.'
+  );
+  const [requiredSkills, setRequiredSkills] = useState<string[]>([
+    'React', 'TypeScript', 'Next.js', 'Tailwind CSS', 'Web Vitals'
+  ]);
+  const [newSkillInput, setNewSkillInput] = useState('');
+  const [requiredExperience, setRequiredExperience] = useState('3-5 years');
+  const [seniorityLevel, setSeniorityLevel] = useState<SeniorityLevel>('Mid-level');
 
-  // Handle role change - auto-update suggested topics
-  const handleRoleChange = (newRole: string) => {
-    setRole(newRole);
-    if (newRole !== 'Other / Custom Role') {
-      const suggested = DEFAULT_TOPICS_BY_ROLE[newRole] || ['General Architecture', 'Problem Solving'];
-      setTopics(suggested);
-      if (errors.role) setErrors(prev => ({ ...prev, role: undefined }));
+  // Interview Configuration
+  const [interviewType, setInterviewType] = useState<InterviewType>('Technical');
+  const [difficulty, setDifficulty] = useState<InterviewDifficulty>('Intermediate');
+  const [questionCount, setQuestionCount] = useState<number>(10);
+  const [expectedDurationMinutes, setExpectedDurationMinutes] = useState<number>(30);
+  const [language, setLanguage] = useState('English');
+
+  // Link Configuration
+  const [expiration, setExpiration] = useState<ExpirationOption>('24 hours');
+
+  // Submission & Result state
+  const [createdInvitation, setCreatedInvitation] = useState<InterviewInvitation | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [baseUrl, setBaseUrl] = useState('http://localhost:3000');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setBaseUrl(window.location.origin);
+    }
+  }, []);
+
+  const handleJobTitleSelect = (title: string) => {
+    setJobTitle(title);
+    if (DEFAULT_SKILLS_BY_ROLE[title]) {
+      setRequiredSkills(DEFAULT_SKILLS_BY_ROLE[title]);
+    }
+    if (errors.jobTitle) {
+      setErrors(prev => ({ ...prev, jobTitle: '' }));
     }
   };
 
-  // Add custom topic tag
-  const handleAddTopic = () => {
-    const trimmed = newTopicInput.trim();
+  const handleAddSkill = () => {
+    const trimmed = newSkillInput.trim();
     if (!trimmed) return;
-    if (!topics.includes(trimmed)) {
-      setTopics(prev => [...prev, trimmed]);
-      if (errors.topics) setErrors(prev => ({ ...prev, topics: undefined }));
+    if (!requiredSkills.includes(trimmed)) {
+      setRequiredSkills(prev => [...prev, trimmed]);
+      if (errors.requiredSkills) setErrors(prev => ({ ...prev, requiredSkills: '' }));
     }
-    setNewTopicInput('');
+    setNewSkillInput('');
   };
 
-  // Remove topic tag
-  const handleRemoveTopic = (topicToRemove: string) => {
-    const filtered = topics.filter(t => t !== topicToRemove);
-    setTopics(filtered);
-    if (filtered.length === 0) {
-      setErrors(prev => ({ ...prev, topics: 'Please select or add at least one topic.' }));
+  const handleRemoveSkill = (skill: string) => {
+    const updated = requiredSkills.filter(s => s !== skill);
+    setRequiredSkills(updated);
+    if (updated.length === 0) {
+      setErrors(prev => ({ ...prev, requiredSkills: 'At least one required skill is needed.' }));
     }
   };
 
-  // Quick Preset Handlers
-  const applyPreset = (preset: 'frontend' | 'backend' | 'system_design') => {
-    if (preset === 'frontend') {
-      setCandidateName(prev => prev || 'Taylor Swift');
-      setRole('Frontend Engineer');
-      setLevel('senior');
-      setInterviewType('technical');
-      setDifficulty('medium');
-      setTopics(DEFAULT_TOPICS_BY_ROLE['Frontend Engineer']);
-      setQuestionCount(3);
-    } else if (preset === 'backend') {
-      setCandidateName(prev => prev || 'Jordan Lee');
-      setRole('Backend Engineer');
-      setLevel('senior');
-      setInterviewType('technical');
-      setDifficulty('hard');
-      setTopics(DEFAULT_TOPICS_BY_ROLE['Backend Engineer']);
-      setQuestionCount(3);
-    } else if (preset === 'system_design') {
-      setCandidateName(prev => prev || 'Morgan Reed');
-      setRole('System Architect');
-      setLevel('lead');
-      setInterviewType('system_design');
-      setDifficulty('hard');
-      setTopics(DEFAULT_TOPICS_BY_ROLE['System Architect']);
-      setQuestionCount(3);
-    }
+  // Quick Preset per the Final Acceptance Test
+  const loadAcceptanceTestPreset = () => {
+    setJobTitle('Frontend Developer');
+    setJobDescription(
+      'Looking for a Frontend Developer with strong React, Next.js, and TypeScript skills to build and maintain user-facing web applications.'
+    );
+    setRequiredSkills(['React', 'TypeScript', 'Next.js', 'Tailwind CSS', 'Web Vitals']);
+    setRequiredExperience('3-5 years');
+    setSeniorityLevel('Mid-level');
+    setInterviewType('Technical');
+    setDifficulty('Intermediate');
+    setQuestionCount(10);
+    setExpectedDurationMinutes(30);
+    setLanguage('English');
+    setExpiration('24 hours');
     setErrors({});
   };
 
-  // Validate form
-  const validateForm = (): boolean => {
-    const newErrors: FormValidationErrors = {};
-
-    if (!candidateName.trim()) {
-      newErrors.candidateName = 'Please enter your candidate name.';
-    } else if (candidateName.trim().length < 2) {
-      newErrors.candidateName = 'Name must be at least 2 characters.';
-    }
-
-    if (!role) {
-      newErrors.role = 'Please select a target role.';
-    }
-
-    if (role === 'Other / Custom Role' && !customRole.trim()) {
-      newErrors.customRole = 'Please specify your custom role title.';
-    }
-
-    if (topics.length === 0) {
-      newErrors.topics = 'Please select or add at least one topic or skill.';
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+  const validate = (): boolean => {
+    const errs: Record<string, string> = {};
+    if (!jobTitle.trim()) errs.jobTitle = 'Job title is required.';
+    if (!jobDescription.trim()) errs.jobDescription = 'Job description is required.';
+    if (requiredSkills.length === 0) errs.requiredSkills = 'Add at least one technical skill tag.';
+    if (!requiredExperience.trim()) errs.requiredExperience = 'Required experience is required.';
+    setErrors(errs);
+    return Object.keys(errs).length === 0;
   };
 
-  // Form submission
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!validate()) return;
 
-    if (!validateForm()) {
-      return;
-    }
-
-    setIsSubmitting(true);
-
-    const config: InterviewConfig = {
-      candidateName: candidateName.trim(),
-      role,
-      customRole: role === 'Other / Custom Role' ? customRole.trim() : undefined,
-      level,
+    const jobConfig: JobConfiguration = {
+      jobTitle: jobTitle.trim(),
+      jobDescription: jobDescription.trim(),
+      requiredSkills,
+      requiredExperience: requiredExperience.trim(),
+      seniorityLevel,
       interviewType,
       difficulty,
-      topics,
       questionCount,
+      expectedDurationMinutes,
+      language,
     };
 
-    // Generate questions
-    const generatedQuestions = generateQuestionsForSession(config);
-
-    // Create session
-    const newSession: InterviewSession = {
-      id: `session-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
-      config,
-      status: 'in_progress',
-      createdAt: new Date().toISOString(),
-      totalTimeSeconds: 0,
-      questions: generatedQuestions,
-      answers: [],
-      currentQuestionIndex: 0,
+    const linkConfig: LinkConfiguration = {
+      expiration,
     };
 
-    // Save to localStorage
-    setActiveSession(newSession);
+    const newInv = createInterview(jobConfig, linkConfig);
+    setCreatedInvitation(newInv);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
-    // Navigate to interview page
-    router.push('/interview');
+  const handleCopyLink = () => {
+    if (!createdInvitation) return;
+    const link = `${baseUrl}/interview/${createdInvitation.token}`;
+    navigator.clipboard.writeText(link);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
   };
 
   return (
     <div className="py-10 md:py-16 bg-slate-50 flex-1">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Page Header */}
-        <div className="mb-8">
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-indigo-600 mb-1">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+        {/* Header */}
+        <div>
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-indigo-600 mb-1">
             <Sliders className="w-4 h-4" />
-            <span>Session Setup</span>
+            <span>Recruiter Portal</span>
           </div>
-          <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
-            Configure Your Mock Interview
-          </h1>
-          <p className="text-slate-600 text-sm mt-1">
-            Tailor the simulated interview to match your target company, seniority level, and core technologies.
-          </p>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
+                Create New Interview
+              </h1>
+              <p className="text-slate-600 text-sm mt-1">
+                Configure job requirements, customize AI interview parameters, and generate a secure invitation link for candidates.
+              </p>
+            </div>
 
-          {/* Preset Buttons for Quick Testing */}
-          <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
-            <span className="text-slate-500 font-medium flex items-center gap-1">
-              <Zap className="w-3.5 h-3.5 text-amber-500" /> Quick 1-Click Presets:
-            </span>
+            {/* Quick Preset Button */}
             <button
               type="button"
-              onClick={() => applyPreset('frontend')}
-              className="px-2.5 py-1 rounded-md bg-white border border-slate-200 text-slate-700 hover:border-indigo-400 hover:text-indigo-600 transition-colors shadow-2xs font-medium"
+              onClick={loadAcceptanceTestPreset}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 transition-colors shadow-2xs self-start sm:self-auto"
             >
-              Frontend Senior
-            </button>
-            <button
-              type="button"
-              onClick={() => applyPreset('backend')}
-              className="px-2.5 py-1 rounded-md bg-white border border-slate-200 text-slate-700 hover:border-indigo-400 hover:text-indigo-600 transition-colors shadow-2xs font-medium"
-            >
-              Backend Senior
-            </button>
-            <button
-              type="button"
-              onClick={() => applyPreset('system_design')}
-              className="px-2.5 py-1 rounded-md bg-white border border-slate-200 text-slate-700 hover:border-indigo-400 hover:text-indigo-600 transition-colors shadow-2xs font-medium"
-            >
-              System Architect Lead
+              <Sparkles className="w-3.5 h-3.5" />
+              Auto-fill Frontend Dev (10 Questions)
             </button>
           </div>
         </div>
 
-        {/* Configuration Form Card */}
+        {/* Success Modal / Display Card after Link Generation */}
+        {createdInvitation && (
+          <div className="bg-white rounded-2xl border-2 border-emerald-500 shadow-md p-6 sm:p-8 space-y-5 animate-fadeIn">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                  <Check className="w-5 h-5" />
+                </div>
+                <div>
+                  <span className="text-xs font-bold uppercase tracking-wider text-emerald-700">
+                    Interview Invitation Link Generated
+                  </span>
+                  <h2 className="text-lg font-bold text-slate-900">
+                    {createdInvitation.jobConfig.seniorityLevel} {createdInvitation.jobConfig.jobTitle}
+                  </h2>
+                </div>
+              </div>
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 uppercase">
+                Status: {createdInvitation.status}
+              </span>
+            </div>
+
+            {/* Link Box */}
+            <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">
+                Unique Invitation Link
+              </label>
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={`${baseUrl}/interview/${createdInvitation.token}`}
+                  className="flex-1 px-3.5 py-2.5 rounded-lg bg-white border border-slate-300 text-xs sm:text-sm font-mono text-slate-800 select-all focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={handleCopyLink}
+                  className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-xs transition-colors"
+                >
+                  {copied ? (
+                    <>
+                      <Check className="w-4 h-4 text-emerald-300" /> Copied!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4" /> Copy Link
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Expiration and Details info */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs text-slate-600 pt-1">
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-indigo-600" />
+                <span>
+                  Expires: <strong className="text-slate-900">{new Date(createdInvitation.expiresAt).toLocaleString()}</strong>
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Layers className="w-4 h-4 text-indigo-600" />
+                <span>
+                  Questions: <strong className="text-slate-900">{createdInvitation.questions.length}</strong>
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                <span>Token: <code className="font-mono text-slate-700">{createdInvitation.token}</code></span>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
+              <Link
+                href={`/interview/${createdInvitation.token}`}
+                target="_blank"
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800"
+              >
+                <span>Preview Candidate Interface</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </Link>
+
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setCreatedInvitation(null)}
+                  className="px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-lg"
+                >
+                  Create Another
+                </button>
+                <Link
+                  href="/dashboard"
+                  className="px-4 py-2 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-lg shadow-xs"
+                >
+                  Go to Recruiter Dashboard
+                </Link>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Create Interview Form */}
         <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 sm:p-8 space-y-8">
-          {/* Section 1: Candidate & Target Role */}
-          <div className="space-y-4">
-            <h2 className="text-base font-bold text-slate-900 border-b border-slate-100 pb-2 flex items-center gap-2">
-              <User className="w-4 h-4 text-indigo-600" />
-              1. Candidate & Target Role
-            </h2>
+          {/* SECTION A: JOB DETAILS */}
+          <div className="space-y-5">
+            <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
+              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Briefcase className="w-4 h-4 text-indigo-600" />
+                A. Job Details
+              </h2>
+              <span className="text-xs text-slate-500 font-medium">Step 1 of 3</span>
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Candidate Name */}
+              {/* Job Title */}
               <div>
-                <label htmlFor="candidateName" className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Candidate Name <span className="text-rose-500">*</span>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                  Job Title <span className="text-rose-500">*</span>
                 </label>
                 <input
-                  id="candidateName"
                   type="text"
-                  value={candidateName}
+                  value={jobTitle}
                   onChange={(e) => {
-                    setCandidateName(e.target.value);
-                    if (errors.candidateName) setErrors(prev => ({ ...prev, candidateName: undefined }));
+                    setJobTitle(e.target.value);
+                    if (errors.jobTitle) setErrors(prev => ({ ...prev, jobTitle: '' }));
                   }}
-                  placeholder="e.g. Alex Chen"
-                  className={`w-full px-3.5 py-2.5 rounded-xl border text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all ${
-                    errors.candidateName 
-                      ? 'border-rose-400 bg-rose-50/30 focus:border-rose-500' 
-                      : 'border-slate-300 hover:border-slate-400 focus:border-indigo-500'
-                  }`}
+                  placeholder="e.g. Frontend Developer"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
                 />
-                {errors.candidateName && (
-                  <p className="mt-1.5 text-xs text-rose-600 flex items-center gap-1">
-                    <AlertCircle className="w-3.5 h-3.5" /> {errors.candidateName}
+                {errors.jobTitle && (
+                  <p className="text-xs text-rose-600 mt-1 flex items-center gap-1">
+                    <AlertCircle className="w-3.5 h-3.5" /> {errors.jobTitle}
                   </p>
                 )}
+
+                {/* Popular suggestions */}
+                <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                  <span className="text-[11px] text-slate-500">Suggestions:</span>
+                  {SAMPLE_JOB_TITLES.slice(0, 4).map((title) => (
+                    <button
+                      key={title}
+                      type="button"
+                      onClick={() => handleJobTitleSelect(title)}
+                      className="text-[11px] px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
+                    >
+                      {title}
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              {/* Target Role */}
+              {/* Seniority Level */}
               <div>
-                <label htmlFor="roleSelect" className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Target Role <span className="text-rose-500">*</span>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                  Seniority Level
                 </label>
                 <select
-                  id="roleSelect"
-                  value={role}
-                  onChange={(e) => handleRoleChange(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all cursor-pointer"
+                  value={seniorityLevel}
+                  onChange={(e) => setSeniorityLevel(e.target.value as SeniorityLevel)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
                 >
-                  {POPULAR_ROLES.map((r) => (
-                    <option key={r} value={r}>
-                      {r}
-                    </option>
-                  ))}
+                  <option value="Junior">Junior (0 - 2 yrs)</option>
+                  <option value="Mid-level">Mid-level (3 - 5 yrs)</option>
+                  <option value="Senior">Senior (5 - 8 yrs)</option>
+                  <option value="Lead / Staff">Lead / Staff (8+ yrs)</option>
+                  <option value="Principal">Principal (10+ yrs)</option>
                 </select>
               </div>
             </div>
 
-            {/* Custom Role Input if 'Other / Custom Role' selected */}
-            {role === 'Other / Custom Role' && (
-              <div className="pt-1">
-                <label htmlFor="customRole" className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Specify Custom Role Title <span className="text-rose-500">*</span>
+            {/* Job Description */}
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                Job Description <span className="text-rose-500">*</span>
+              </label>
+              <textarea
+                rows={3}
+                value={jobDescription}
+                onChange={(e) => {
+                  setJobDescription(e.target.value);
+                  if (errors.jobDescription) setErrors(prev => ({ ...prev, jobDescription: '' }));
+                }}
+                placeholder="Describe role responsibilities, team context, and key deliverables..."
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+              />
+              {errors.jobDescription && (
+                <p className="text-xs text-rose-600 mt-1 flex items-center gap-1">
+                  <AlertCircle className="w-3.5 h-3.5" /> {errors.jobDescription}
+                </p>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Required Experience */}
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                  Required Experience <span className="text-rose-500">*</span>
                 </label>
                 <input
-                  id="customRole"
                   type="text"
-                  value={customRole}
+                  value={requiredExperience}
                   onChange={(e) => {
-                    setCustomRole(e.target.value);
-                    if (errors.customRole) setErrors(prev => ({ ...prev, customRole: undefined }));
+                    setRequiredExperience(e.target.value);
+                    if (errors.requiredExperience) setErrors(prev => ({ ...prev, requiredExperience: '' }));
                   }}
-                  placeholder="e.g. Embedded Firmware Engineer"
-                  className={`w-full px-3.5 py-2.5 rounded-xl border text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all ${
-                    errors.customRole 
-                      ? 'border-rose-400 bg-rose-50/30 focus:border-rose-500' 
-                      : 'border-slate-300 hover:border-slate-400 focus:border-indigo-500'
-                  }`}
+                  placeholder="e.g. 3-5 years"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
                 />
-                {errors.customRole && (
-                  <p className="mt-1.5 text-xs text-rose-600 flex items-center gap-1">
-                    <AlertCircle className="w-3.5 h-3.5" /> {errors.customRole}
+              </div>
+
+              {/* Skills Tags Input */}
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                  Required Technical Skills <span className="text-rose-500">*</span>
+                </label>
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {requiredSkills.map((skill) => (
+                    <span
+                      key={skill}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200"
+                    >
+                      <span>{skill}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveSkill(skill)}
+                        className="p-0.5 rounded-full hover:bg-indigo-200 text-indigo-700"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={newSkillInput}
+                    onChange={(e) => setNewSkillInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddSkill();
+                      }
+                    }}
+                    placeholder="Add skill (e.g. GraphQL, Redis)..."
+                    className="flex-1 px-3 py-1.5 rounded-lg border border-slate-300 text-xs text-slate-900 focus:outline-none focus:border-indigo-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddSkill}
+                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition-colors"
+                  >
+                    Add
+                  </button>
+                </div>
+                {errors.requiredSkills && (
+                  <p className="text-xs text-rose-600 mt-1 flex items-center gap-1">
+                    <AlertCircle className="w-3.5 h-3.5" /> {errors.requiredSkills}
                   </p>
                 )}
               </div>
-            )}
-          </div>
-
-          {/* Section 2: Seniority & Interview Format */}
-          <div className="space-y-4">
-            <h2 className="text-base font-bold text-slate-900 border-b border-slate-100 pb-2 flex items-center gap-2">
-              <Layers className="w-4 h-4 text-indigo-600" />
-              2. Experience Level & Interview Style
-            </h2>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Seniority Level */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
-                  Experience Level
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {(
-                    [
-                      { key: 'junior', label: 'Junior', desc: '0 - 2 yrs' },
-                      { key: 'mid', label: 'Mid-Level', desc: '3 - 5 yrs' },
-                      { key: 'senior', label: 'Senior', desc: '5 - 8 yrs' },
-                      { key: 'lead', label: 'Lead / Staff', desc: '8+ yrs' },
-                    ] as const
-                  ).map((item) => (
-                    <button
-                      type="button"
-                      key={item.key}
-                      onClick={() => setLevel(item.key)}
-                      className={`p-3 rounded-xl border text-left transition-all ${
-                        level === item.key
-                          ? 'border-indigo-600 bg-indigo-50/50 ring-1 ring-indigo-600 text-indigo-950'
-                          : 'border-slate-200 bg-white hover:border-slate-300 text-slate-800'
-                      }`}
-                    >
-                      <div className="text-xs font-bold">{item.label}</div>
-                      <div className="text-[11px] text-slate-500">{item.desc}</div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Interview Focus Type */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
-                  Interview Focus Type
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {(
-                    [
-                      { key: 'technical', label: 'Technical', desc: 'Coding & architecture' },
-                      { key: 'system_design', label: 'System Design', desc: 'Distributed scale' },
-                      { key: 'behavioral', label: 'Behavioral', desc: 'STAR leadership' },
-                      { key: 'mixed', label: 'Mixed / Combo', desc: 'Comprehensive' },
-                    ] as const
-                  ).map((item) => (
-                    <button
-                      type="button"
-                      key={item.key}
-                      onClick={() => setInterviewType(item.key)}
-                      className={`p-3 rounded-xl border text-left transition-all ${
-                        interviewType === item.key
-                          ? 'border-indigo-600 bg-indigo-50/50 ring-1 ring-indigo-600 text-indigo-950'
-                          : 'border-slate-200 bg-white hover:border-slate-300 text-slate-800'
-                      }`}
-                    >
-                      <div className="text-xs font-bold">{item.label}</div>
-                      <div className="text-[11px] text-slate-500">{item.desc}</div>
-                    </button>
-                  ))}
-                </div>
-              </div>
             </div>
           </div>
 
-          {/* Section 3: Difficulty & Question Count */}
-          <div className="space-y-4">
-            <h2 className="text-base font-bold text-slate-900 border-b border-slate-100 pb-2 flex items-center gap-2">
-              <Sliders className="w-4 h-4 text-indigo-600" />
-              3. Difficulty & Duration
-            </h2>
+          {/* SECTION B: INTERVIEW CONFIGURATION */}
+          <div className="space-y-5 pt-4 border-t border-slate-100">
+            <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
+              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Layers className="w-4 h-4 text-indigo-600" />
+                B. Interview Configuration
+              </h2>
+              <span className="text-xs text-slate-500 font-medium">Step 2 of 3</span>
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Interview Type */}
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-2">
+                  Interview Type
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {(['Technical', 'HR', 'Behavioural', 'Mixed'] as const).map((type) => (
+                    <button
+                      type="button"
+                      key={type}
+                      onClick={() => setInterviewType(type)}
+                      className={`p-2.5 rounded-xl border text-xs font-bold transition-all text-left ${
+                        interviewType === type
+                          ? 'border-indigo-600 bg-indigo-50 text-indigo-950 ring-1 ring-indigo-600'
+                          : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                      }`}
+                    >
+                      {type}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* Difficulty */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
-                  Difficulty
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-2">
+                  Interview Difficulty
                 </label>
                 <div className="grid grid-cols-3 gap-2">
-                  {(
-                    [
-                      { key: 'easy', label: 'Standard', color: 'hover:border-emerald-300' },
-                      { key: 'medium', label: 'Challenging', color: 'hover:border-indigo-300' },
-                      { key: 'hard', label: 'Rigorous', color: 'hover:border-rose-300' },
-                    ] as const
-                  ).map((item) => (
+                  {(['Beginner', 'Intermediate', 'Advanced'] as const).map((diff) => (
                     <button
                       type="button"
-                      key={item.key}
-                      onClick={() => setDifficulty(item.key)}
-                      className={`py-2.5 px-3 rounded-xl border text-center text-xs font-bold transition-all ${
-                        difficulty === item.key
+                      key={diff}
+                      onClick={() => setDifficulty(diff)}
+                      className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition-all text-center ${
+                        difficulty === diff
                           ? 'border-indigo-600 bg-indigo-600 text-white shadow-xs'
-                          : `border-slate-200 bg-white text-slate-700 ${item.color}`
+                          : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
                       }`}
                     >
-                      {item.label}
+                      {diff}
                     </button>
                   ))}
                 </div>
               </div>
+            </div>
 
-              {/* Question Count */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 pt-2">
+              {/* Number of Questions */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
-                  Question Count
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                  Number of Questions
                 </label>
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { count: 3, label: '3 Questions', desc: '~10 min' },
-                    { count: 5, label: '5 Questions', desc: '~20 min' },
-                    { count: 7, label: '7 Questions', desc: '~30 min' },
-                  ].map((item) => (
-                    <button
-                      type="button"
-                      key={item.count}
-                      onClick={() => setQuestionCount(item.count)}
-                      className={`py-2 px-3 rounded-xl border text-center transition-all ${
-                        questionCount === item.count
-                          ? 'border-indigo-600 bg-indigo-50/60 ring-1 ring-indigo-600 text-indigo-950 font-bold'
-                          : 'border-slate-200 bg-white hover:border-slate-300 text-slate-700 font-medium'
-                      }`}
-                    >
-                      <div className="text-xs">{item.label}</div>
-                      <div className="text-[10px] text-slate-500">{item.desc}</div>
-                    </button>
-                  ))}
-                </div>
+                <select
+                  value={questionCount}
+                  onChange={(e) => setQuestionCount(Number(e.target.value))}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-sm text-slate-900 focus:outline-none focus:border-indigo-500"
+                >
+                  <option value={3}>3 Questions (Quick screen)</option>
+                  <option value={5}>5 Questions (Standard)</option>
+                  <option value={7}>7 Questions (In-depth)</option>
+                  <option value={10}>10 Questions (Comprehensive)</option>
+                </select>
+              </div>
+
+              {/* Expected Duration */}
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                  Expected Duration
+                </label>
+                <select
+                  value={expectedDurationMinutes}
+                  onChange={(e) => setExpectedDurationMinutes(Number(e.target.value))}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-sm text-slate-900 focus:outline-none focus:border-indigo-500"
+                >
+                  <option value={15}>15 Minutes</option>
+                  <option value={30}>30 Minutes</option>
+                  <option value={45}>45 Minutes</option>
+                  <option value={60}>60 Minutes</option>
+                </select>
+              </div>
+
+              {/* Language */}
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                  Interview Language
+                </label>
+                <select
+                  value={language}
+                  onChange={(e) => setLanguage(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-sm text-slate-900 focus:outline-none focus:border-indigo-500"
+                >
+                  <option value="English">English</option>
+                  <option value="Spanish">Spanish</option>
+                  <option value="German">German</option>
+                  <option value="French">French</option>
+                </select>
               </div>
             </div>
           </div>
 
-          {/* Section 4: Topics & Skills Tags */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+          {/* SECTION C: LINK CONFIGURATION */}
+          <div className="space-y-5 pt-4 border-t border-slate-100">
+            <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
               <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Code className="w-4 h-4 text-indigo-600" />
-                4. Focus Topics & Technical Tags <span className="text-rose-500">*</span>
+                <Clock className="w-4 h-4 text-indigo-600" />
+                C. Link Configuration
               </h2>
-              <span className="text-xs text-slate-500 font-medium">
-                {topics.length} selected
-              </span>
+              <span className="text-xs text-slate-500 font-medium">Step 3 of 3</span>
             </div>
 
-            <p className="text-xs text-slate-500">
-              Select or add tags you want the interviewer to cover during your session:
-            </p>
-
-            {/* Topic Chips */}
-            <div className="flex flex-wrap gap-2">
-              {topics.map((topic) => (
-                <span
-                  key={topic}
-                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 transition-all"
-                >
-                  <span>{topic}</span>
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-2">
+                Invitation Link Expiration
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {[
+                  { value: '24 hours' as const, label: '24 Hours', desc: 'Ideal for prompt response' },
+                  { value: '48 hours' as const, label: '48 Hours', desc: 'Standard recruiter window' },
+                  { value: '7 days' as const, label: '7 Days', desc: 'Extended deadline' },
+                ].map((item) => (
                   <button
                     type="button"
-                    onClick={() => handleRemoveTopic(topic)}
-                    className="p-0.5 rounded-full hover:bg-indigo-200/60 text-indigo-700 transition-colors"
-                    aria-label={`Remove topic ${topic}`}
+                    key={item.value}
+                    onClick={() => setExpiration(item.value)}
+                    className={`p-3 rounded-xl border text-left transition-all ${
+                      expiration === item.value
+                        ? 'border-indigo-600 bg-indigo-50 ring-1 ring-indigo-600 text-indigo-950 font-bold'
+                        : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                    }`}
                   >
-                    <X className="w-3 h-3" />
+                    <div className="text-xs">{item.label}</div>
+                    <div className="text-[11px] text-slate-500 font-normal">{item.desc}</div>
                   </button>
-                </span>
-              ))}
+                ))}
+              </div>
             </div>
-
-            {/* Add Custom Topic Input */}
-            <div className="flex items-center gap-2 max-w-md pt-1">
-              <input
-                type="text"
-                value={newTopicInput}
-                onChange={(e) => setNewTopicInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleAddTopic();
-                  }
-                }}
-                placeholder="Add custom topic (e.g. GraphQL, Tailwind, Kafka)..."
-                className="flex-1 px-3.5 py-2 rounded-xl border border-slate-300 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-              />
-              <button
-                type="button"
-                onClick={handleAddTopic}
-                className="inline-flex items-center gap-1 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors"
-              >
-                <Plus className="w-3.5 h-3.5" /> Add
-              </button>
-            </div>
-
-            {errors.topics && (
-              <p className="text-xs text-rose-600 flex items-center gap-1">
-                <AlertCircle className="w-3.5 h-3.5" /> {errors.topics}
-              </p>
-            )}
           </div>
 
-          {/* Form Actions */}
+          {/* Submit Actions */}
           <div className="pt-6 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <p className="text-xs text-slate-500 text-center sm:text-left">
-              Session runs locally in your browser. No API keys required for Day 1.
+            <p className="text-xs text-slate-500">
+              Generates a time-limited invitation token. Only candidates with this link can start the assessment.
             </p>
 
             <button
               type="submit"
-              disabled={isSubmitting}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-xl font-bold text-sm text-white bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-200 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-[0.98]"
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-xl font-bold text-sm text-white bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-200 hover:shadow-lg transition-all active:scale-[0.98]"
             >
-              {isSubmitting ? (
-                <span>Generating Questions...</span>
-              ) : (
-                <>
-                  <span>Begin Mock Interview</span>
-                  <ArrowRight className="w-4 h-4" />
-                </>
-              )}
+              <span>Generate Invitation Link</span>
+              <ArrowRight className="w-4 h-4" />
             </button>
           </div>
         </form>

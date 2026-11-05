@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
+import { Suspense } from 'react';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 
@@ -15,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'IntervueAI - Practice Tech Interviews with AI',
-  description: 'Conduct realistic mock interviews tailored to your target role, seniority level, and tech stack.',
+  title: 'IntervueAI - AI Recruitment & Interview Platform',
+  description: 'AI-powered technical recruitment interview platform for hiring teams and engineering managers.',
 };
 
 export default function RootLayout({
@@ -27,9 +28,13 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full`}>
       <body className="min-h-screen flex flex-col bg-slate-50 text-slate-900 antialiased font-sans">
-        <Navbar />
+        <Suspense fallback={<header className="h-16 border-b border-slate-200 bg-white" />}>
+          <Navbar />
+        </Suspense>
         <main className="flex-1 flex flex-col">{children}</main>
-        <Footer />
+        <Suspense fallback={<footer className="h-16 border-t border-slate-200 bg-white" />}>
+          <Footer />
+        </Suspense>
       </body>
     </html>
   );

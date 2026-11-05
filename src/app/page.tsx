@@ -1,76 +1,66 @@
-import React from 'react';
+'use client';
+
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { 
   ArrowRight, 
   CheckCircle2, 
   Terminal, 
   Sparkles, 
-  Cpu, 
   ShieldCheck, 
-  Award, 
-  Clock, 
-  BrainCircuit, 
   Layers, 
   Code2, 
   Users,
-  ChevronRight
+  ChevronRight,
+  Briefcase,
+  Clock,
+  FileText,
+  PlusCircle,
+  Copy,
+  Check
 } from 'lucide-react';
+import { getInterviews, getRecruiterMetrics } from '@/lib/storage';
+import { InterviewInvitation, RecruiterDashboardMetrics } from '@/types/interview';
 
-export default function HomePage() {
-  const popularRoles = [
-    {
-      title: 'Frontend Engineer',
-      level: 'Senior Level',
-      type: 'React & Core Architecture',
-      description: 'Server components, Web Vitals, hydration performance, state colocation.',
-      color: 'from-blue-500/10 to-indigo-500/10 text-indigo-700 border-indigo-200'
-    },
-    {
-      title: 'Backend Engineer',
-      level: 'Mid to Senior',
-      type: 'Distributed Systems & SQL',
-      description: 'ACID transactions, optimistic locking, Redis rate-limiting, stateless auth.',
-      color: 'from-emerald-500/10 to-teal-500/10 text-emerald-700 border-emerald-200'
-    },
-    {
-      title: 'System Architect',
-      level: 'Lead / Staff',
-      type: 'Large-scale Design',
-      description: 'Microservices, message queues, push notification fan-outs, URL shorteners.',
-      color: 'from-amber-500/10 to-orange-500/10 text-amber-700 border-amber-200'
-    },
-    {
-      title: 'Behavioral & Leadership',
-      level: 'All Seniorities',
-      type: 'STAR Method & Culture',
-      description: 'Cross-functional disagreements, incident postmortems, managing tech debt.',
-      color: 'from-violet-500/10 to-purple-500/10 text-violet-700 border-violet-200'
-    }
-  ];
+export default function OverviewPage() {
+  const [metrics, setMetrics] = useState<RecruiterDashboardMetrics>({
+    totalCreated: 0,
+    activeLinks: 0,
+    pendingInterviews: 0,
+    completedInterviews: 0,
+    expiredInterviews: 0,
+  });
+  const [recentInterviews, setRecentInterviews] = useState<InterviewInvitation[]>([]);
+
+  useEffect(() => {
+    const data = getInterviews();
+    setMetrics(getRecruiterMetrics(data));
+    setRecentInterviews(data.slice(0, 3));
+  }, []);
 
   return (
     <div className="flex flex-col min-h-full">
       {/* Hero Section */}
-      <section className="relative overflow-hidden bg-gradient-to-b from-white via-indigo-50/30 to-slate-50 pt-16 pb-20 md:pt-24 md:pb-28 border-b border-slate-200">
+      <section className="relative overflow-hidden bg-gradient-to-b from-white via-indigo-50/20 to-slate-50 pt-16 pb-20 md:pt-24 md:pb-28 border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <div className="max-w-3xl mx-auto text-center space-y-6">
             {/* Status Pill */}
             <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-semibold shadow-xs">
               <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-              <span>Day 1: Fully Working Mock AI Interviewer Engine</span>
+              <span>AI Recruitment Interview Platform</span>
             </div>
 
             {/* Main Headline */}
             <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold text-slate-900 tracking-tight leading-[1.15]">
-              Master Your Tech Interviews with{' '}
+              Autonomous Technical Screening for{' '}
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-violet-600">
-                Mock AI Feedback
+                Modern Hiring Teams
               </span>
             </h1>
 
             {/* Subheading */}
             <p className="text-lg sm:text-xl text-slate-600 leading-relaxed font-normal">
-              Step into an immersive, zero-pressure simulated interview. Tailor questions to your target role, answer in real-time, and get scored on communication, technical depth, and problem-solving.
+              Empower your recruitment pipeline. Configure custom engineering roles, generate time-limited invitation links, and let simulated AI interviewers conduct structured first-round assessments.
             </p>
 
             {/* Action Buttons */}
@@ -79,7 +69,8 @@ export default function HomePage() {
                 href="/config"
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-7 py-3.5 rounded-xl text-base font-semibold text-white bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-200 hover:shadow-lg transition-all active:scale-[0.98]"
               >
-                <span>Configure & Start Interview</span>
+                <PlusCircle className="w-5 h-5" />
+                <span>Create New Interview</span>
                 <ArrowRight className="w-4 h-4" />
               </Link>
 
@@ -87,20 +78,20 @@ export default function HomePage() {
                 href="/dashboard"
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl text-base font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 shadow-xs hover:border-slate-400 transition-all"
               >
-                <span>View Dashboard</span>
+                <span>Open Recruiter Dashboard</span>
               </Link>
             </div>
 
             {/* Trust points */}
             <div className="pt-6 flex flex-wrap items-center justify-center gap-6 text-xs text-slate-500 font-medium">
               <span className="inline-flex items-center gap-1.5">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600" /> No signup required
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Unique Time-Limited Invitation Links
               </span>
               <span className="inline-flex items-center gap-1.5">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Role-tailored questions
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" /> No Candidate Account Friction
               </span>
               <span className="inline-flex items-center gap-1.5">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Instant scorecard & review
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Private Recruiter Evaluation Reports
               </span>
             </div>
           </div>
@@ -110,196 +101,118 @@ export default function HomePage() {
         <div className="absolute inset-0 bg-[linear-gradient(to_right,#e2e8f01a_1px,transparent_1px),linear-gradient(to_bottom,#e2e8f01a_1px,transparent_1px)] bg-[size:3rem_3rem] pointer-events-none" />
       </section>
 
-      {/* Feature Highlights Grid */}
-      <section className="py-16 md:py-24 bg-white border-b border-slate-200">
+      {/* Recruiter Quick Metrics Overview */}
+      <section className="py-12 bg-white border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center max-w-2xl mx-auto mb-16">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 text-center sm:text-left">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                Total Interviews Created
+              </span>
+              <p className="text-3xl font-extrabold text-slate-900 mt-1">{metrics.totalCreated}</p>
+              <span className="text-[11px] text-slate-500">Pipeline total</span>
+            </div>
+
+            <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 text-center sm:text-left">
+              <span className="text-xs font-bold uppercase tracking-wider text-emerald-700">
+                Active Invitation Links
+              </span>
+              <p className="text-3xl font-extrabold text-emerald-600 mt-1">{metrics.activeLinks}</p>
+              <span className="text-[11px] text-emerald-700 font-medium">Ready for candidate intake</span>
+            </div>
+
+            <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 text-center sm:text-left">
+              <span className="text-xs font-bold uppercase tracking-wider text-indigo-700">
+                Pending Interviews
+              </span>
+              <p className="text-3xl font-extrabold text-indigo-600 mt-1">{metrics.pendingInterviews}</p>
+              <span className="text-[11px] text-indigo-700 font-medium">In pipeline</span>
+            </div>
+
+            <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 text-center sm:text-left">
+              <span className="text-xs font-bold uppercase tracking-wider text-violet-700">
+                Completed Reports
+              </span>
+              <p className="text-3xl font-extrabold text-violet-600 mt-1">{metrics.completedInterviews}</p>
+              <span className="text-[11px] text-violet-700 font-medium">Ready for hiring review</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 3-Step Recruiter Workflow */}
+      <section className="py-16 md:py-20 bg-slate-50 border-b border-slate-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center max-w-xl mx-auto mb-14">
             <h2 className="text-xs uppercase font-bold tracking-widest text-indigo-600 mb-2">
-              Built For High-Velocity Practice
+              Recruiter Workflow
             </h2>
-            <p className="text-3xl font-bold text-slate-900 tracking-tight">
-              Everything you need to polish your answers before the live round
+            <p className="text-2xl sm:text-3xl font-bold text-slate-900">
+              How IntervueAI Powers Your Hiring Funnel
             </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {/* Card 1 */}
-            <div className="p-7 rounded-2xl border border-slate-200 bg-slate-50/50 hover:bg-white hover:shadow-md hover:border-slate-300 transition-all duration-200 flex flex-col justify-between">
-              <div>
-                <div className="w-12 h-12 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center mb-5">
-                  <BrainCircuit className="w-6 h-6" />
-                </div>
-                <h3 className="text-lg font-bold text-slate-900 mb-2">
-                  Role & Level Customization
-                </h3>
-                <p className="text-sm text-slate-600 leading-relaxed">
-                  Target Frontend, Backend, System Architecture, or custom roles. Configure junior, mid, senior, or lead difficulty with custom tech topics.
-                </p>
-              </div>
-              <div className="mt-6 pt-4 border-t border-slate-200/60 text-xs font-semibold text-indigo-600 flex items-center gap-1">
-                Flexible configuration <ChevronRight className="w-3.5 h-3.5" />
-              </div>
-            </div>
-
-            {/* Card 2 */}
-            <div className="p-7 rounded-2xl border border-slate-200 bg-slate-50/50 hover:bg-white hover:shadow-md hover:border-slate-300 transition-all duration-200 flex flex-col justify-between">
-              <div>
-                <div className="w-12 h-12 rounded-xl bg-violet-100 text-violet-700 flex items-center justify-center mb-5">
-                  <Terminal className="w-6 h-6" />
-                </div>
-                <h3 className="text-lg font-bold text-slate-900 mb-2">
-                  Interactive Answer Studio
-                </h3>
-                <p className="text-sm text-slate-600 leading-relaxed">
-                  Focus on crisp, structured explanations with real-time character counters, elapsed timer tracking, and helpful hint toggles.
-                </p>
-              </div>
-              <div className="mt-6 pt-4 border-t border-slate-200/60 text-xs font-semibold text-violet-600 flex items-center gap-1">
-                Distraction-free environment <ChevronRight className="w-3.5 h-3.5" />
-              </div>
-            </div>
-
-            {/* Card 3 */}
-            <div className="p-7 rounded-2xl border border-slate-200 bg-slate-50/50 hover:bg-white hover:shadow-md hover:border-slate-300 transition-all duration-200 flex flex-col justify-between">
-              <div>
-                <div className="w-12 h-12 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center mb-5">
-                  <Award className="w-6 h-6" />
-                </div>
-                <h3 className="text-lg font-bold text-slate-900 mb-2">
-                  Performance Scorecard
-                </h3>
-                <p className="text-sm text-slate-600 leading-relaxed">
-                  Get scored on communication, technical depth, and problem-solving. Review strengths and improvement areas saved to your personal dashboard.
-                </p>
-              </div>
-              <div className="mt-6 pt-4 border-t border-slate-200/60 text-xs font-semibold text-emerald-600 flex items-center gap-1">
-                Session history tracking <ChevronRight className="w-3.5 h-3.5" />
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Role Tracks Preview Section */}
-      <section className="py-16 bg-slate-50 border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col md:flex-row md:items-end justify-between mb-10 gap-4">
-            <div>
-              <h2 className="text-2xl font-bold text-slate-900">
-                Explore Available Interview Tracks
-              </h2>
-              <p className="text-slate-600 text-sm mt-1">
-                Practice popular interview topics with our curated question banks.
-              </p>
-            </div>
-            <Link
-              href="/config"
-              className="inline-flex items-center gap-1.5 text-sm font-semibold text-indigo-600 hover:text-indigo-800"
-            >
-              Start custom configuration <ArrowRight className="w-4 h-4" />
-            </Link>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {popularRoles.map((role) => (
-              <div
-                key={role.title}
-                className="bg-white rounded-xl p-5 border border-slate-200 shadow-xs hover:border-indigo-300 hover:shadow-sm transition-all flex flex-col justify-between"
-              >
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-[11px] font-bold tracking-wide uppercase px-2 py-0.5 rounded-md bg-slate-100 text-slate-700">
-                      {role.level}
-                    </span>
-                    <span className="text-xs text-indigo-600 font-medium">
-                      {role.type}
-                    </span>
-                  </div>
-                  <h4 className="font-bold text-slate-900 text-base mb-2">
-                    {role.title}
-                  </h4>
-                  <p className="text-xs text-slate-500 leading-relaxed mb-4">
-                    {role.description}
-                  </p>
-                </div>
-
-                <Link
-                  href="/config"
-                  className="w-full text-center py-2 px-3 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors"
-                >
-                  Practice this track
-                </Link>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* 3-Step "How It Works" Section */}
-      <section className="py-16 md:py-20 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center max-w-xl mx-auto mb-14">
-            <h2 className="text-xs uppercase font-bold tracking-widest text-indigo-600 mb-2">
-              Simple 3-Step Flow
-            </h2>
-            <p className="text-2xl sm:text-3xl font-bold text-slate-900">
-              How IntervueAI Prepares You
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 relative">
-            <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200 relative">
+            <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-2xs">
               <div className="w-10 h-10 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-sm mb-4 shadow-sm">
                 1
               </div>
               <h3 className="font-bold text-slate-900 text-base mb-2">
-                Configure Your Session
+                Configure Job & Requirements
               </h3>
               <p className="text-sm text-slate-600 leading-relaxed">
-                Provide your candidate name, choose role seniority, interview type, and select your target technical tags.
+                Define the job role, required skills, seniority level, question count, and difficulty. Questions are automatically tailored to the profile.
               </p>
             </div>
 
-            <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200 relative">
+            <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-2xs">
               <div className="w-10 h-10 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-sm mb-4 shadow-sm">
                 2
               </div>
               <h3 className="font-bold text-slate-900 text-base mb-2">
-                Answer Real Questions
+                Send Unique Invitation Link
               </h3>
               <p className="text-sm text-slate-600 leading-relaxed">
-                The simulated AI interviewer poses real-world challenges. Type your thoughts, use hints if needed, and submit each response.
+                Generate a time-limited link (24h/48h). Candidates click the link, verify their identity with their name and email, and start answering questions.
               </p>
             </div>
 
-            <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200 relative">
+            <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-2xs">
               <div className="w-10 h-10 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-sm mb-4 shadow-sm">
                 3
               </div>
               <h3 className="font-bold text-slate-900 text-base mb-2">
-                Analyze & Track Progress
+                Review Confidential Reports
               </h3>
               <p className="text-sm text-slate-600 leading-relaxed">
-                Receive instant evaluations, review key strengths, and track your historical interview progress on your dashboard.
+                Access completed transcripts, response durations, and structured recommendations inside your recruiter dashboard to make fast hiring decisions.
               </p>
             </div>
           </div>
+        </div>
+      </section>
 
-          {/* Quick CTA Box */}
-          <div className="mt-14 p-8 rounded-2xl bg-gradient-to-r from-indigo-900 to-slate-900 text-white text-center sm:text-left flex flex-col sm:flex-row items-center justify-between gap-6 shadow-xl">
-            <div>
-              <h3 className="text-xl font-bold mb-1">
-                Ready to practice your first mock interview?
+      {/* Recruiter Action Banner */}
+      <section className="py-16 bg-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="p-8 sm:p-10 rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex flex-col sm:flex-row items-center justify-between gap-6 shadow-xl">
+            <div className="space-y-1">
+              <span className="text-xs font-bold uppercase tracking-wider text-indigo-300">
+                Start Screening Immediately
+              </span>
+              <h3 className="text-2xl font-bold">
+                Ready to configure your next interview invitation?
               </h3>
-              <p className="text-slate-300 text-sm">
-                Zero setup required. Takes under 5 minutes to complete a quick 3-question warmup.
+              <p className="text-slate-300 text-sm max-w-xl">
+                Takes under 60 seconds to configure a Frontend Developer or Backend role and copy the invitation link.
               </p>
             </div>
             <Link
               href="/config"
               className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-white text-indigo-950 font-bold text-sm hover:bg-slate-100 transition-colors shadow-sm whitespace-nowrap"
             >
-              Start Free Mock Interview <ArrowRight className="w-4 h-4" />
+              <PlusCircle className="w-4 h-4" />
+              Create Interview Now
             </Link>
           </div>
         </div>

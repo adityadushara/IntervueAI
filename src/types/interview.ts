@@ -9,6 +9,7 @@ export type ExpirationOption = '24 hours' | '48 hours' | '7 days';
 export type InterviewStatus = 'active' | 'in_progress' | 'completed' | 'expired' | 'revoked';
 
 export interface JobConfiguration {
+  companyName: string;
   jobTitle: string;
   jobDescription: string;
   requiredSkills: string[];

@@ -108,7 +108,7 @@ function DashboardContent() {
 
   return (
     <div className="py-10 md:py-16 bg-slate-50 flex-1">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+      <div className="ui-page-container space-y-8">
         {/* Page Top Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
@@ -126,28 +126,28 @@ function DashboardContent() {
 
           <Link
             href="/config"
-            className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm text-white bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-200 hover:shadow-lg transition-all active:scale-[0.98] self-start md:self-auto"
+            className="ui-btn-primary self-start md:self-auto"
           >
             <PlusCircle className="w-4 h-4" />
-            Create New Interview
+            <span>Create New Interview</span>
           </Link>
         </div>
 
         {/* Recruiter Metrics KPI Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
           {/* Total Created */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs">
+          <div className="ui-card p-5">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block">
               Total Created
             </span>
             <div className="text-3xl font-extrabold text-slate-900 mt-2">
               {metrics.totalCreated}
             </div>
-            <span className="text-[11px] text-slate-500 mt-1 block">All interview links</span>
+            <span className="text-[11px] text-slate-400 mt-1 block">All interview links</span>
           </div>
 
           {/* Active Links */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs">
+          <div className="ui-card p-5">
             <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 block">
               Active Links
             </span>
@@ -158,7 +158,7 @@ function DashboardContent() {
           </div>
 
           {/* Pending Interviews */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs">
+          <div className="ui-card p-5">
             <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-700 block">
               Pending
             </span>
@@ -169,7 +169,7 @@ function DashboardContent() {
           </div>
 
           {/* Completed Interviews */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs">
+          <div className="ui-card p-5">
             <span className="text-[11px] font-bold uppercase tracking-wider text-violet-700 block">
               Completed
             </span>
@@ -180,19 +180,19 @@ function DashboardContent() {
           </div>
 
           {/* Expired Interviews */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs col-span-2 lg:col-span-1">
+          <div className="ui-card p-5 col-span-2 lg:col-span-1">
             <span className="text-[11px] font-bold uppercase tracking-wider text-amber-700 block">
               Expired
             </span>
             <div className="text-3xl font-extrabold text-amber-600 mt-2">
               {metrics.expiredInterviews}
             </div>
-            <span className="text-[11px] text-slate-500 mt-1 block">Past expiration window</span>
+            <span className="text-[11px] text-slate-400 mt-1 block">Past expiration window</span>
           </div>
         </div>
 
         {/* Dashboard Navigation Tabs */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="ui-card overflow-hidden">
           <div className="flex border-b border-slate-200 bg-slate-50/50 overflow-x-auto">
             <button
               type="button"

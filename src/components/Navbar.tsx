@@ -13,8 +13,7 @@ import {
   Users, 
   Settings as SettingsIcon,
   LayoutDashboard,
-  ShieldCheck,
-  Briefcase
+  ShieldCheck
 } from 'lucide-react';
 
 export default function Navbar() {
@@ -26,7 +25,7 @@ export default function Navbar() {
   if (isCandidateRoute) {
     return (
       <header className="sticky top-0 z-50 w-full border-b border-slate-200 bg-white/95 backdrop-blur-md shadow-2xs">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+        <div className="ui-page-container h-16 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-xs">
               <Bot className="w-5 h-5" />
@@ -62,7 +61,7 @@ export default function Navbar() {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-slate-200 bg-white/95 backdrop-blur-md shadow-2xs">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="ui-page-container">
         <div className="flex items-center justify-between h-16">
           {/* Brand Logo */}
           <Link href="/" className="flex items-center gap-2.5 group">
@@ -108,16 +107,16 @@ export default function Navbar() {
           <div className="hidden sm:flex items-center gap-3">
             <Link
               href="/dashboard"
-              className="px-3.5 py-2 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
+              className="ui-btn-secondary h-9 px-3 text-xs"
             >
-              Recruiter Dashboard
+              Dashboard
             </Link>
             <Link
               href="/config"
-              className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm hover:shadow-indigo-200 hover:shadow-md transition-all active:scale-[0.98]"
+              className="ui-btn-primary h-9 px-3.5 text-xs"
             >
               <PlusCircle className="w-4 h-4" />
-              Create New Interview
+              <span>Create Interview</span>
             </Link>
           </div>
 
@@ -158,7 +157,7 @@ export default function Navbar() {
             <Link
               href="/config"
               onClick={() => setMobileMenuOpen(false)}
-              className="w-full text-center py-2.5 px-4 text-xs font-bold text-white bg-indigo-600 rounded-lg shadow-sm"
+              className="ui-btn-primary w-full text-xs h-10"
             >
               Create New Interview
             </Link>

@@ -15,6 +15,7 @@ export const SEEDED_RECRUITER_INTERVIEWS: InterviewInvitation[] = [
     id: 'intv-sample-completed-1',
     token: 'eval-demo-completed-88',
     jobConfig: {
+      companyName: 'Acme Global Tech',
       jobTitle: 'Frontend Developer',
       jobDescription: 'Seeking an experienced Frontend Developer with deep React, Next.js, and TypeScript expertise to lead customer dashboard development.',
       requiredSkills: ['React', 'Next.js', 'TypeScript', 'Web Vitals', 'Tailwind CSS'],
@@ -106,6 +107,7 @@ export const SEEDED_RECRUITER_INTERVIEWS: InterviewInvitation[] = [
     id: 'intv-sample-active-2',
     token: 'active-react-link-77',
     jobConfig: {
+      companyName: 'Vercel Partner Labs',
       jobTitle: 'Senior React Engineer',
       jobDescription: 'Lead our web platform architecture and design system implementation using modern React 19 and Next.js.',
       requiredSkills: ['React 19', 'Next.js App Router', 'Server Components', 'TypeScript', 'Design Systems'],
@@ -123,6 +125,10 @@ export const SEEDED_RECRUITER_INTERVIEWS: InterviewInvitation[] = [
     createdAt: '2026-11-05T08:00:00.000Z',
     expiresAt: '2026-11-06T08:00:00.000Z',
     status: 'active',
+    candidate: {
+      fullName: 'Taylor Swift',
+      email: 'taylor.swift@example.com',
+    },
     questions: [
       {
         id: 'q-act-1',
@@ -161,6 +167,7 @@ export const SEEDED_RECRUITER_INTERVIEWS: InterviewInvitation[] = [
     id: 'intv-sample-expired-3',
     token: 'expired-devops-link-12',
     jobConfig: {
+      companyName: 'CloudScale Systems',
       jobTitle: 'DevOps & Cloud Engineer',
       jobDescription: 'Automate multi-cloud Kubernetes clusters and CI/CD deployment pipelines.',
       requiredSkills: ['Docker', 'Kubernetes', 'AWS', 'Terraform', 'Prometheus'],
@@ -178,6 +185,10 @@ export const SEEDED_RECRUITER_INTERVIEWS: InterviewInvitation[] = [
     createdAt: '2026-11-01T10:00:00.000Z',
     expiresAt: '2026-11-02T10:00:00.000Z',
     status: 'expired',
+    candidate: {
+      fullName: 'Alex Mercer',
+      email: 'alex.mercer@example.com',
+    },
     questions: [],
     answers: []
   }
@@ -244,7 +255,8 @@ export function getInterviewById(id: string): InterviewInvitation | null {
 
 export function createInterview(
   jobConfig: JobConfiguration,
-  linkConfig: LinkConfiguration
+  linkConfig: LinkConfiguration,
+  candidateInfo?: CandidateInfo
 ): InterviewInvitation {
   const interviews = getInterviews();
   
@@ -275,6 +287,10 @@ export function createInterview(
     createdAt,
     expiresAt,
     status: 'active',
+    candidate: candidateInfo ? {
+      fullName: candidateInfo.fullName,
+      email: candidateInfo.email,
+    } : undefined,
     questions,
     answers: [],
   };

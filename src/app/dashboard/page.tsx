@@ -35,6 +35,7 @@ import {
 } from '@/types/interview';
 import { 
   getInterviews, 
+  fetchInterviewsFromServer,
   getRecruiterMetrics, 
   revokeInterview, 
   deleteInterview 
@@ -70,10 +71,20 @@ function DashboardContent() {
     }
   }, [initialTab]);
 
-  const refreshData = () => {
+  const refreshData = async () => {
     const data = getInterviews();
     setInterviews(data);
     setMetrics(getRecruiterMetrics(data));
+
+    try {
+      const serverData = await fetchInterviewsFromServer();
+      if (serverData && serverData.length > 0) {
+        setInterviews(serverData);
+        setMetrics(getRecruiterMetrics(serverData));
+      }
+    } catch {
+      // Ignore network errors, local data already rendered
+    }
   };
 
   useEffect(() => {

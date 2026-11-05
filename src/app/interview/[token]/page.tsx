@@ -12,17 +12,15 @@ import {
   AlertCircle, 
   HelpCircle, 
   LogOut, 
-  ShieldCheck, 
   ArrowRight,
-  Briefcase,
   Building,
-  Mail,
   Lock,
   Check
 } from 'lucide-react';
 import { InterviewInvitation, CandidateAnswer } from '@/types/interview';
 import { 
   getInterviewByToken, 
+  fetchInterviewByTokenFromServer,
   startCandidateInterview, 
   submitCandidateAnswer, 
   completeCandidateInterview 
@@ -60,45 +58,62 @@ function CandidateInterviewContent() {
   // Final submission state
   const [isSubmitted, setIsSubmitted] = useState(false);
 
-  // Validate token on mount
+  // Validate token on mount with server-sync support for incognito windows
   useEffect(() => {
-    if (!token) {
-      setErrorType('invalid');
-      setIsLoading(false);
-      return;
-    }
+    let isMounted = true;
 
-    const found = getInterviewByToken(token);
-    if (!found) {
-      setErrorType('invalid');
-      setIsLoading(false);
-      return;
-    }
-
-    // Check status
-    if (found.status === 'revoked') {
-      setErrorType('revoked');
-    } else if (found.status === 'completed') {
-      setErrorType('completed');
-    } else if (found.status === 'expired' || new Date(found.expiresAt).getTime() < Date.now()) {
-      setErrorType('expired');
-    } else {
-      setInvitation(found);
-      // Pre-fill candidate info set by recruiter
-      const prefillName = found.candidate?.fullName || 'Candidate';
-      const prefillEmail = found.candidate?.email || 'candidate@example.com';
-      setCandidateName(prefillName);
-      setCandidateEmail(prefillEmail);
-
-      // If already has started and in progress
-      if (found.status === 'in_progress') {
-        setHasStarted(true);
-        setCurrentQuestionIndex(found.answers?.length || 0);
-        setQuestionStartTime(Date.now());
+    async function validate() {
+      if (!token) {
+        if (isMounted) {
+          setErrorType('invalid');
+          setIsLoading(false);
+        }
+        return;
       }
+
+      // Check local cache first, fallback to server store for incognito sessions
+      let found = getInterviewByToken(token);
+      if (!found) {
+        found = await fetchInterviewByTokenFromServer(token);
+      }
+
+      if (!isMounted) return;
+
+      if (!found) {
+        setErrorType('invalid');
+        setIsLoading(false);
+        return;
+      }
+
+      // Check status
+      if (found.status === 'revoked') {
+        setErrorType('revoked');
+      } else if (found.status === 'completed') {
+        setErrorType('completed');
+      } else if (found.status === 'expired' || new Date(found.expiresAt).getTime() < Date.now()) {
+        setErrorType('expired');
+      } else {
+        setInvitation(found);
+        // Pre-fill candidate info set by recruiter
+        const prefillName = found.candidate?.fullName || 'Candidate';
+        const prefillEmail = found.candidate?.email || 'candidate@example.com';
+        setCandidateName(prefillName);
+        setCandidateEmail(prefillEmail);
+
+        // Resume in-progress state and elapsed timer on page refresh
+        if (found.status === 'in_progress') {
+          setHasStarted(true);
+          setCurrentQuestionIndex(found.answers?.length || 0);
+          setElapsedSeconds(found.totalDurationSeconds || 0);
+          setQuestionStartTime(Date.now());
+        }
+      }
+
+      setIsLoading(false);
     }
 
-    setIsLoading(false);
+    validate();
+    return () => { isMounted = false; };
   }, [token]);
 
   // Elapsed timer when interview is active
@@ -138,13 +153,13 @@ function CandidateInterviewContent() {
   // Submit Current Answer
   const handleAnswerSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!invitation) return;
+    if (!invitation || isEvaluating) return;
 
     const trimmed = currentAnswer.trim();
     const wordCount = trimmed.split(/\s+/).filter(Boolean).length;
 
     if (wordCount < 4) {
-      setAnswerValidationError('Please provide a more detailed response (at least 4 words) before continuing.');
+      setAnswerValidationError('Please provide a more complete response (at least 4 words) before continuing.');
       return;
     }
 
@@ -153,11 +168,12 @@ function CandidateInterviewContent() {
 
     const currentQ = invitation.questions[currentQuestionIndex];
     const timeSpent = Math.max(10, Math.round((Date.now() - (questionStartTime || Date.now())) / 1000));
+    const newTotalSeconds = elapsedSeconds + timeSpent;
 
     // Save answer into storage
-    submitCandidateAnswer(token, currentQ.id, currentQ.text, trimmed, timeSpent);
+    submitCandidateAnswer(token, currentQ.id, currentQ.text, trimmed, timeSpent, newTotalSeconds);
 
-    // Simulate AI interviewer transition
+    // Simulate AI interviewer review and step
     setTimeout(() => {
       const isLast = currentQuestionIndex + 1 >= invitation.questions.length;
       const feedback = generateMockFeedbackForAnswer(
@@ -168,7 +184,7 @@ function CandidateInterviewContent() {
       );
 
       if (isLast) {
-        completeCandidateInterview(token, elapsedSeconds + timeSpent);
+        completeCandidateInterview(token, newTotalSeconds);
         setIsSubmitted(true);
         setIsEvaluating(false);
       } else {
@@ -316,7 +332,14 @@ function CandidateInterviewContent() {
   }
 
   // STEP 2: Candidate Invitation Experience
-  // When a candidate opens the link, they see only pre-filled name and email, company, role, and the Start Interview button. Nothing else.
+  // When a candidate opens the link, they see ONLY:
+  // 1. Candidate's pre-filled name.
+  // 2. Candidate's pre-filled email address.
+  // 3. Company name and description.
+  // 4. Job role.
+  // 5. Job description.
+  // 6. Start Interview button.
+  // Nothing else. All configuration options removed from candidate side.
   if (!hasStarted) {
     const { jobConfig } = invitation;
 
@@ -324,7 +347,7 @@ function CandidateInterviewContent() {
       <div className="py-16 md:py-24 bg-slate-50 flex-1 flex items-center justify-center px-4">
         <div className="ui-card-container w-full">
           <div className="ui-card p-6 sm:p-8 space-y-6 shadow-sm">
-            {/* Company & Role Header */}
+            {/* 3. Company Name & 4. Job Role */}
             <div className="text-center space-y-2 border-b border-slate-100 pb-5">
               <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center mx-auto shadow-xs mb-3">
                 <Bot className="w-6 h-6" />
@@ -341,7 +364,17 @@ function CandidateInterviewContent() {
               </p>
             </div>
 
-            {/* Candidate Pre-filled Fields & Start Button */}
+            {/* 5. Job Description & Company Details */}
+            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700 space-y-1.5">
+              <span className="font-bold text-slate-800 uppercase tracking-wider text-[11px] block">
+                Job Description
+              </span>
+              <p className="leading-relaxed whitespace-pre-line text-slate-600">
+                {jobConfig.jobDescription}
+              </p>
+            </div>
+
+            {/* 1. Candidate Name, 2. Candidate Email & 6. Start Interview Button */}
             <form onSubmit={handleStartInterview} className="space-y-4">
               {/* Pre-filled Name */}
               <div>

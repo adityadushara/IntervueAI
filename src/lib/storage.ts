@@ -234,6 +234,93 @@ export function saveInterviews(interviews: InterviewInvitation[]): void {
   }
 }
 
+// Background sync to server API for cross-browser & incognito persistence
+function getApiEndpoint(path: string): string {
+  if (typeof window !== 'undefined' && window.location?.origin && !path.startsWith('http')) {
+    return `${window.location.origin}${path}`;
+  }
+  return path;
+}
+
+function syncToServer(interview: InterviewInvitation) {
+  if (typeof window === 'undefined') return;
+  try {
+    fetch(getApiEndpoint('/api/interviews'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(interview),
+    }).catch(err => {
+      // Background sync is best-effort for cross-window incognito isolation
+    });
+  } catch (e) {
+    // Ignore in offline mode
+  }
+}
+
+function syncPatchToServer(token: string, updates: Partial<InterviewInvitation>) {
+  if (typeof window === 'undefined') return;
+  try {
+    fetch(getApiEndpoint(`/api/interviews/${token}`), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    }).catch(err => {
+      // Background sync is best-effort for cross-window incognito isolation
+    });
+  } catch (e) {
+    // Ignore in offline mode
+  }
+}
+
+export async function fetchInterviewsFromServer(): Promise<InterviewInvitation[]> {
+  if (typeof window === 'undefined') return getInterviews();
+  try {
+    const res = await fetch('/api/interviews');
+    if (res.ok) {
+      const serverData: InterviewInvitation[] = await res.json();
+      if (Array.isArray(serverData) && serverData.length > 0) {
+        // Merge server data with local cache
+        const local = getInterviews();
+        const mergedMap = new Map<string, InterviewInvitation>();
+        
+        // Put local first
+        local.forEach(i => mergedMap.set(i.token, i));
+        // Server updates/additions take precedence
+        serverData.forEach(i => mergedMap.set(i.token, i));
+
+        const merged = Array.from(mergedMap.values());
+        saveInterviews(merged);
+        return merged;
+      }
+    }
+  } catch (e) {
+    console.warn('Could not reach /api/interviews, using local cache');
+  }
+  return getInterviews();
+}
+
+export async function fetchInterviewByTokenFromServer(token: string): Promise<InterviewInvitation | null> {
+  const local = getInterviewByToken(token);
+  if (local) return local;
+
+  if (typeof window === 'undefined') return null;
+  try {
+    const res = await fetch(`/api/interviews/${token}`);
+    if (res.ok) {
+      const serverInv: InterviewInvitation = await res.json();
+      if (serverInv && serverInv.token) {
+        const interviews = getInterviews();
+        const updated = [serverInv, ...interviews.filter(i => i.token !== serverInv.token)];
+        saveInterviews(updated);
+        return serverInv;
+      }
+    }
+  } catch (e) {
+    console.warn(`Could not reach /api/interviews/${token}`);
+  }
+  return null;
+}
+
 export function getInterviewByToken(token: string): InterviewInvitation | null {
   const interviews = getInterviews();
   const found = interviews.find(i => i.token.trim().toLowerCase() === token.trim().toLowerCase());
@@ -243,6 +330,7 @@ export function getInterviewByToken(token: string): InterviewInvitation | null {
   if (found.status === 'active' && new Date(found.expiresAt).getTime() < Date.now()) {
     found.status = 'expired';
     saveInterviews(interviews);
+    syncPatchToServer(found.token, { status: 'expired' });
   }
 
   return found;
@@ -267,11 +355,16 @@ export function createInterview(
   // Calculate expiration
   const now = Date.now();
   let durationMs = 24 * 60 * 60 * 1000; // 24 hours default
-  if (linkConfig.expiration === '48 hours') {
+  const expirationSetting = typeof linkConfig === 'string' ? linkConfig : linkConfig?.expiration;
+  if (expirationSetting === '48 hours') {
     durationMs = 48 * 60 * 60 * 1000;
-  } else if (linkConfig.expiration === '7 days') {
+  } else if (expirationSetting === '7 days') {
     durationMs = 7 * 24 * 60 * 60 * 1000;
   }
+
+  const normalizedLinkConfig: LinkConfiguration = typeof linkConfig === 'string' 
+    ? { expiration: linkConfig as any }
+    : linkConfig;
 
   const createdAt = new Date(now).toISOString();
   const expiresAt = new Date(now + durationMs).toISOString();
@@ -283,7 +376,7 @@ export function createInterview(
     id: `intv-${now.toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
     token,
     jobConfig,
-    linkConfig,
+    linkConfig: normalizedLinkConfig,
     createdAt,
     expiresAt,
     status: 'active',
@@ -297,18 +390,24 @@ export function createInterview(
 
   const updated = [newInvitation, ...interviews];
   saveInterviews(updated);
+  syncToServer(newInvitation);
   return newInvitation;
 }
 
 export function revokeInterview(id: string): void {
   const interviews = getInterviews();
+  let revokedToken: string | null = null;
   const updated = interviews.map(i => {
     if (i.id === id && i.status !== 'completed') {
+      revokedToken = i.token;
       return { ...i, status: 'revoked' as const };
     }
     return i;
   });
   saveInterviews(updated);
+  if (revokedToken) {
+    syncPatchToServer(revokedToken, { status: 'revoked' });
+  }
 }
 
 export function deleteInterview(id: string): void {
@@ -327,12 +426,17 @@ export function startCandidateInterview(token: string, candidate: CandidateInfo)
 
   target.status = 'in_progress';
   target.candidate = {
+    ...target.candidate,
     ...candidate,
     startedAt: new Date().toISOString(),
   };
 
   interviews[index] = target;
   saveInterviews(interviews);
+  syncPatchToServer(target.token, {
+    status: 'in_progress',
+    candidate: target.candidate,
+  });
   return target;
 }
 
@@ -341,7 +445,8 @@ export function submitCandidateAnswer(
   questionId: string,
   questionText: string,
   answerText: string,
-  timeSpentSeconds: number
+  timeSpentSeconds: number,
+  totalElapsedSeconds?: number
 ): InterviewInvitation | null {
   const interviews = getInterviews();
   const index = interviews.findIndex(i => i.token.trim().toLowerCase() === token.trim().toLowerCase());
@@ -364,8 +469,16 @@ export function submitCandidateAnswer(
     target.answers.push(newAnswer);
   }
 
+  if (totalElapsedSeconds !== undefined) {
+    target.totalDurationSeconds = totalElapsedSeconds;
+  }
+
   interviews[index] = target;
   saveInterviews(interviews);
+  syncPatchToServer(target.token, {
+    answers: target.answers,
+    totalDurationSeconds: target.totalDurationSeconds,
+  });
   return target;
 }
 
@@ -385,6 +498,12 @@ export function completeCandidateInterview(token: string, totalSeconds: number):
 
   interviews[index] = target;
   saveInterviews(interviews);
+  syncPatchToServer(target.token, {
+    status: 'completed',
+    completedAt: target.completedAt,
+    totalDurationSeconds: target.totalDurationSeconds,
+    recruiterReport: target.recruiterReport,
+  });
   return target;
 }
 

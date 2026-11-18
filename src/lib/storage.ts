@@ -5,6 +5,7 @@ import {
   ExpirationOption,
   CandidateInfo, 
   CandidateAnswer, 
+  InterviewQuestion,
   RecruiterDashboardMetrics 
 } from '@/types/interview';
 import { generateQuestionsForJob, generateRecruiterEvaluation } from '@/lib/mockData';
@@ -196,12 +197,11 @@ export const SEEDED_RECRUITER_INTERVIEWS: InterviewInvitation[] = [
 ];
 
 export function getInterviews(): InterviewInvitation[] {
-  if (typeof window === 'undefined') return SEEDED_RECRUITER_INTERVIEWS;
+  if (typeof window === 'undefined') return [];
   try {
     const raw = localStorage.getItem(RECRUITER_INTERVIEWS_KEY);
     if (!raw) {
-      localStorage.setItem(RECRUITER_INTERVIEWS_KEY, JSON.stringify(SEEDED_RECRUITER_INTERVIEWS));
-      return SEEDED_RECRUITER_INTERVIEWS;
+      return [];
     }
     const parsed: InterviewInvitation[] = JSON.parse(raw);
     
@@ -222,7 +222,7 @@ export function getInterviews(): InterviewInvitation[] {
     return checked;
   } catch (err) {
     console.error('Error loading recruiter interviews', err);
-    return SEEDED_RECRUITER_INTERVIEWS;
+    return [];
   }
 }
 
@@ -237,89 +237,152 @@ export function saveInterviews(interviews: InterviewInvitation[]): void {
 
 // Background sync to server API for cross-browser & incognito persistence
 function getApiEndpoint(path: string): string {
-  if (typeof window !== 'undefined' && window.location?.origin && !path.startsWith('http')) {
+  if (typeof window !== 'undefined' && window.location?.origin && window.location.origin !== 'null' && !path.startsWith('http')) {
     return `${window.location.origin}${path}`;
+  }
+  if (!path.startsWith('http')) {
+    return `http://localhost:3000${path}`;
   }
   return path;
 }
 
-function syncToServer(interview: InterviewInvitation) {
-  if (typeof window === 'undefined') return;
+export async function syncToServer(interview: InterviewInvitation): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
   try {
-    fetch(getApiEndpoint('/api/interviews'), {
+    const res = await fetch(getApiEndpoint('/api/interviews'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(interview),
-    }).catch(() => {
-      // Background sync is best-effort for cross-window incognito isolation
     });
-  } catch {
-    // Ignore in offline mode
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      console.warn(`Sync interview to server failed [HTTP ${res.status}]:`, errText);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.warn('Network error syncing interview to server:', err);
+    return false;
   }
 }
 
-function syncPatchToServer(token: string, updates: Partial<InterviewInvitation>) {
-  if (typeof window === 'undefined') return;
+export async function syncPatchToServer(token: string, updates: Partial<InterviewInvitation>): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
   try {
-    fetch(getApiEndpoint(`/api/interviews/${token}`), {
+    const res = await fetch(getApiEndpoint(`/api/interviews/${token}`), {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
-    }).catch(() => {
-      // Background sync is best-effort for cross-window incognito isolation
     });
-  } catch {
-    // Ignore in offline mode
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      console.warn(`Sync patch to server failed [HTTP ${res.status}]:`, errText);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.warn('Network error syncing patch to server:', err);
+    return false;
   }
 }
 
 export async function fetchInterviewsFromServer(): Promise<InterviewInvitation[]> {
-  if (typeof window === 'undefined') return getInterviews();
+  if (typeof window === 'undefined') return [];
   try {
-    const res = await fetch('/api/interviews');
+    const res = await fetch(getApiEndpoint('/api/interviews'));
     if (res.ok) {
       const serverData: InterviewInvitation[] = await res.json();
-      if (Array.isArray(serverData) && serverData.length > 0) {
-        // Merge server data with local cache
+      if (Array.isArray(serverData)) {
+        // Build map of known raw tokens from local cache to preserve clickable links
         const local = getInterviews();
-        const mergedMap = new Map<string, InterviewInvitation>();
-        
-        // Put local first
-        local.forEach(i => mergedMap.set(i.token, i));
-        // Server updates/additions take precedence
-        serverData.forEach(i => mergedMap.set(i.token, i));
+        const rawTokenMap = new Map<string, string>();
+        local.forEach(inv => {
+          if (inv.token && !inv.token.startsWith('inv-hash-')) {
+            rawTokenMap.set(inv.id, inv.token);
+          }
+        });
 
-        const merged = Array.from(mergedMap.values());
+        const merged = serverData.map(inv => {
+          const knownRaw = rawTokenMap.get(inv.id);
+          if (knownRaw) {
+            return { ...inv, token: knownRaw };
+          }
+          return inv;
+        });
+
         saveInterviews(merged);
         return merged;
       }
     }
-  } catch {
-    console.warn('Could not reach /api/interviews, using local cache');
+  } catch (err) {
+    console.warn('Could not reach /api/interviews, using local cache:', err);
   }
   return getInterviews();
 }
 
 export async function fetchInterviewByTokenFromServer(token: string): Promise<InterviewInvitation | null> {
-  const local = getInterviewByToken(token);
-  if (local) return local;
-
   if (typeof window === 'undefined') return null;
   try {
-    const res = await fetch(`/api/interviews/${token}`);
+    const res = await fetch(getApiEndpoint(`/api/interviews/${encodeURIComponent(token)}`));
     if (res.ok) {
       const serverInv: InterviewInvitation = await res.json();
       if (serverInv && serverInv.token) {
         const interviews = getInterviews();
-        const updated = [serverInv, ...interviews.filter(i => i.token !== serverInv.token)];
+        const updated = [serverInv, ...interviews.filter(i => i.token !== serverInv.token && i.id !== serverInv.id)];
         saveInterviews(updated);
         return serverInv;
       }
     }
-  } catch {
-    console.warn(`Could not reach /api/interviews/${token}`);
+  } catch (err) {
+    console.warn(`Could not reach /api/interviews/${token}:`, err);
   }
-  return null;
+  return getInterviewByToken(token);
+}
+
+export async function deleteInterviewOnServer(id: string): Promise<boolean> {
+  if (typeof window === 'undefined') return true;
+  try {
+    const res = await fetch(getApiEndpoint(`/api/interviews?id=${encodeURIComponent(id)}`), {
+      method: 'DELETE',
+    });
+    return res.ok;
+  } catch (err) {
+    console.error('Failed to delete interview on server:', err);
+    return false;
+  }
+}
+
+export async function revokeInterviewOnServer(id: string): Promise<boolean> {
+  if (typeof window === 'undefined') return true;
+  try {
+    const res = await fetch(getApiEndpoint('/api/interviews'), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, action: 'revoke' }),
+    });
+    return res.ok;
+  } catch (err) {
+    console.error('Failed to revoke interview on server:', err);
+    return false;
+  }
+}
+
+export async function regenerateTokenOnServer(id: string): Promise<{ success: boolean; token?: string; error?: string }> {
+  if (typeof window === 'undefined') return { success: false, error: 'Window undefined' };
+  try {
+    const res = await fetch(getApiEndpoint('/api/interviews'), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, action: 'regenerate-token' }),
+    });
+    const data = await res.json();
+    if (res.ok && data.success && data.token) {
+      return { success: true, token: data.token };
+    }
+    return { success: false, error: data.error || 'Failed to regenerate token' };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'Network error' };
+  }
 }
 
 export function getInterviewByToken(token: string): InterviewInvitation | null {
@@ -364,7 +427,9 @@ export function generateSecureToken(): string {
 export function createInterview(
   jobConfig: JobConfiguration,
   linkConfig: LinkConfiguration,
-  candidateInfo?: CandidateInfo
+  candidateInfo?: CandidateInfo,
+  customQuestions?: InterviewQuestion[],
+  options?: { skipSync?: boolean }
 ): InterviewInvitation {
   const interviews = getInterviews();
   
@@ -388,8 +453,10 @@ export function createInterview(
   const createdAt = new Date(now).toISOString();
   const expiresAt = new Date(now + durationMs).toISOString();
 
-  // Generate tailored questions
-  const questions = generateQuestionsForJob(jobConfig);
+  // Generate tailored questions or use AI-generated questions
+  const questions = (customQuestions && customQuestions.length > 0) 
+    ? customQuestions 
+    : (jobConfig.structuredPlan?.generatedQuestions || generateQuestionsForJob(jobConfig));
 
   const uniqueSuffix = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
     ? crypto.randomUUID().substring(0, 8)
@@ -413,7 +480,9 @@ export function createInterview(
 
   const updated = [newInvitation, ...interviews];
   saveInterviews(updated);
-  syncToServer(newInvitation);
+  if (!options?.skipSync) {
+    syncToServer(newInvitation);
+  }
   return newInvitation;
 }
 
@@ -431,12 +500,14 @@ export function revokeInterview(id: string): void {
   if (revokedToken) {
     syncPatchToServer(revokedToken, { status: 'revoked' });
   }
+  revokeInterviewOnServer(id);
 }
 
 export function deleteInterview(id: string): void {
   const interviews = getInterviews();
   const updated = interviews.filter(i => i.id !== id);
   saveInterviews(updated);
+  deleteInterviewOnServer(id);
 }
 
 export function startCandidateInterview(token: string, candidate: CandidateInfo): InterviewInvitation | null {
@@ -537,9 +608,13 @@ export function getRecruiterMetrics(interviews: InterviewInvitation[]): Recruite
   let pendingInterviews = 0;
   let completedInterviews = 0;
   let expiredInterviews = 0;
+  let failedEvaluations = 0;
 
   interviews.forEach(inv => {
     const isExpiredByTime = new Date(inv.expiresAt).getTime() < now;
+    if (inv.evaluationStatus === 'failed' || inv.recruiterReport?.evaluationStatus === 'failed') {
+      failedEvaluations++;
+    }
     if (inv.status === 'completed') {
       completedInterviews++;
     } else if (inv.status === 'expired' || (inv.status === 'active' && isExpiredByTime)) {
@@ -558,5 +633,6 @@ export function getRecruiterMetrics(interviews: InterviewInvitation[]): Recruite
     pendingInterviews,
     completedInterviews,
     expiredInterviews,
+    failedEvaluations,
   };
 }

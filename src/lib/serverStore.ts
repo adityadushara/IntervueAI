@@ -1,11 +1,15 @@
 import { InterviewInvitation } from '@/types/interview';
-import { SEEDED_RECRUITER_INTERVIEWS } from '@/lib/storage';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 
-// Use a local JSON file in a .data directory for server-side persistence across browser sessions
-const DATA_DIR = path.join(process.cwd(), '.data');
+// Detect serverless environment (e.g. Vercel or AWS Lambda) where process.cwd() is read-only
+const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+const DATA_DIR = isServerless ? path.join(os.tmpdir(), 'intervue-data') : path.join(process.cwd(), '.data');
 const DATA_FILE = path.join(DATA_DIR, 'interviews.json');
+
+// In-memory fallback store to ensure zero crash in serverless environments
+let memoryCache: InterviewInvitation[] = [];
 
 function ensureDataFile() {
   try {
@@ -13,10 +17,13 @@ function ensureDataFile() {
       fs.mkdirSync(DATA_DIR, { recursive: true });
     }
     if (!fs.existsSync(DATA_FILE)) {
-      fs.writeFileSync(DATA_FILE, JSON.stringify(SEEDED_RECRUITER_INTERVIEWS, null, 2), 'utf-8');
+      fs.writeFileSync(DATA_FILE, JSON.stringify(memoryCache, null, 2), 'utf-8');
     }
   } catch (e) {
-    console.error('Error ensuring data file:', e);
+    // In serverless / read-only contexts, log at debug level and rely on memoryCache
+    if (!isServerless) {
+      console.warn('Notice: Filesystem data directory could not be initialized, using memory fallback:', e);
+    }
   }
 }
 
@@ -39,23 +46,33 @@ export function getServerInterviews(): InterviewInvitation[] {
       });
 
       if (changed) {
-        fs.writeFileSync(DATA_FILE, JSON.stringify(checked, null, 2), 'utf-8');
+        try {
+          fs.writeFileSync(DATA_FILE, JSON.stringify(checked, null, 2), 'utf-8');
+        } catch {
+          // Ignore write failure in transient serverless
+        }
       }
 
+      memoryCache = checked;
       return checked;
     }
   } catch (e) {
-    console.error('Error reading server data file:', e);
+    if (!isServerless) {
+      console.warn('Notice: Reading data file failed, using memory fallback:', e);
+    }
   }
-  return SEEDED_RECRUITER_INTERVIEWS;
+  return memoryCache;
 }
 
 export function saveServerInterviews(interviews: InterviewInvitation[]): void {
+  memoryCache = [...interviews];
   ensureDataFile();
   try {
     fs.writeFileSync(DATA_FILE, JSON.stringify(interviews, null, 2), 'utf-8');
   } catch (e) {
-    console.error('Error writing server data file:', e);
+    if (!isServerless) {
+      console.warn('Notice: Writing data file failed, saved to memory fallback:', e);
+    }
   }
 }
 
@@ -76,4 +93,28 @@ export function upsertServerInterview(interview: InterviewInvitation): Interview
 
   saveServerInterviews(interviews);
   return interview;
+}
+
+export function updateServerInterviewToken(id: string, newToken: string): void {
+  const interviews = getServerInterviews();
+  const target = interviews.find(i => i.id === id);
+  if (target) {
+    target.token = newToken;
+    saveServerInterviews(interviews);
+  }
+}
+
+export function deleteServerInterview(id: string): void {
+  const interviews = getServerInterviews();
+  const filtered = interviews.filter(i => i.id !== id);
+  saveServerInterviews(filtered);
+}
+
+export function revokeServerInterview(id: string): void {
+  const interviews = getServerInterviews();
+  const target = interviews.find(i => i.id === id);
+  if (target && target.status !== 'completed') {
+    target.status = 'revoked';
+    saveServerInterviews(interviews);
+  }
 }

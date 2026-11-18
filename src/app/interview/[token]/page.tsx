@@ -1,11 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { 
-  Bot, 
-  User, 
-  Send, 
   Clock, 
   CheckCircle2, 
   AlertCircle, 
@@ -14,7 +11,14 @@ import {
   ArrowRight,
   Building,
   Lock,
-  Check
+  Check, 
+  Mic, 
+  MicOff, 
+  RotateCcw, 
+  Copy, 
+  Loader2,
+  Terminal,
+  Volume2
 } from 'lucide-react';
 import { InterviewInvitation } from '@/types/interview';
 import { 
@@ -25,6 +29,8 @@ import {
   completeCandidateInterview 
 } from '@/lib/storage';
 import { getCandidateGreeting, generateMockFeedbackForAnswer } from '@/lib/mockInterviewer';
+import { useVoiceInterview } from '@/lib/voice/useVoiceInterview';
+import { VoiceVisualizer, VoiceVisualizerStatus } from '@/components/voice/VoiceVisualizer';
 
 function CandidateInterviewContent() {
   const params = useParams();
@@ -48,6 +54,7 @@ function CandidateInterviewContent() {
   const [showHint, setShowHint] = useState(false);
   const [answerValidationError, setAnswerValidationError] = useState<string | null>(null);
   const [showExitModal, setShowExitModal] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   // Timer states
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -55,6 +62,102 @@ function CandidateInterviewContent() {
 
   // Final submission state
   const [isSubmitted, setIsSubmitted] = useState(false);
+
+  // Submission lock ref to strictly prevent duplicate submissions
+  const isSubmittingRef = useRef(false);
+  const lastSpokenQuestionIndexRef = useRef<number | null>(null);
+
+  // Voice Interview Engine (Voice-Only Mode)
+  const {
+    permissionState,
+    isVoiceSupported,
+    isAiSpeaking,
+    isListening,
+    isPaused,
+    audioLevel,
+    finalTranscript,
+    interimTranscript,
+    errorMessage: voiceErrorMessage,
+    requestMicrophone,
+    speakText,
+    startListening,
+    stopListening,
+    retryRecognition,
+    togglePause,
+    interruptAi,
+    resetTranscript,
+  } = useVoiceInterview({
+    enabled: hasStarted,
+    config: {
+      silenceThresholdMs: 3000,
+      autoSubmitOnSilence: false,
+      voiceRate: 0.94,
+      voicePitch: 0.98,
+    },
+    onTranscriptChange: (text) => {
+      if (text) {
+        setCurrentAnswer(text);
+        setAnswerValidationError(null);
+      }
+    },
+    onAnswerReady: (text) => {
+      if (text) {
+        setCurrentAnswer(prev => {
+          const cleanPrev = prev.trim();
+          if (!cleanPrev) return text;
+          if (cleanPrev.includes(text)) return cleanPrev;
+          return `${cleanPrev} ${text}`;
+        });
+        setAnswerValidationError(null);
+      }
+    }
+  });
+
+  // Automatically read greeting & question aloud when candidate transitions to a new question
+  useEffect(() => {
+    if (!hasStarted || permissionState !== 'granted' || !invitation) return;
+    const currentQ = invitation.questions[currentQuestionIndex];
+    if (!currentQ) return;
+
+    if (lastSpokenQuestionIndexRef.current !== currentQuestionIndex) {
+      lastSpokenQuestionIndexRef.current = currentQuestionIndex;
+      resetTranscript();
+      setCurrentAnswer('');
+
+      const greetingPrefix = (currentQuestionIndex === 0 && !interviewerNote)
+        ? `${getCandidateGreeting(invitation.jobConfig, candidateName)}. `
+        : '';
+      const feedbackPrefix = interviewerNote 
+        ? `${interviewerNote}. Next question: ` 
+        : '';
+      const textToSpeak = `${greetingPrefix}${feedbackPrefix}${currentQ.text}`;
+
+      speakText(textToSpeak, () => {
+        startListening();
+      });
+    }
+  }, [hasStarted, permissionState, currentQuestionIndex, invitation, interviewerNote, candidateName, resetTranscript, speakText, startListening]);
+
+  // Replay question vocalization handler
+  const handleReplayQuestion = () => {
+    if (!invitation || isEvaluating) return;
+    const currentQ = invitation.questions[currentQuestionIndex];
+    if (!currentQ) return;
+    speakText(currentQ.text, () => {
+      startListening(currentAnswer);
+    });
+  };
+
+  // Reset/Clear spoken response for current question so candidate can re-record
+  const handleClearTranscript = () => {
+    if (isEvaluating) return;
+    resetTranscript();
+    setCurrentAnswer('');
+    setAnswerValidationError(null);
+    if (!isListening && !isAiSpeaking) {
+      startListening('');
+    }
+  };
 
   // Validate token on mount with server-sync support for incognito windows
   useEffect(() => {
@@ -69,10 +172,9 @@ function CandidateInterviewContent() {
         return;
       }
 
-      // Check local cache first, fallback to server store for incognito sessions
-      let found = getInterviewByToken(token);
+      let found = await fetchInterviewByTokenFromServer(token);
       if (!found) {
-        found = await fetchInterviewByTokenFromServer(token);
+        found = getInterviewByToken(token);
       }
 
       if (!isMounted) return;
@@ -83,7 +185,6 @@ function CandidateInterviewContent() {
         return;
       }
 
-      // Check status
       if (found.status === 'revoked') {
         setErrorType('revoked');
       } else if (found.status === 'completed') {
@@ -92,13 +193,11 @@ function CandidateInterviewContent() {
         setErrorType('expired');
       } else {
         setInvitation(found);
-        // Pre-fill candidate info set by recruiter
         const prefillName = found.candidate?.fullName || 'Candidate';
         const prefillEmail = found.candidate?.email || 'candidate@example.com';
         setCandidateName(prefillName);
         setCandidateEmail(prefillEmail);
 
-        // Resume in-progress state and elapsed timer on page refresh
         if (found.status === 'in_progress') {
           setHasStarted(true);
           setCurrentQuestionIndex(found.answers?.length || 0);
@@ -131,10 +230,21 @@ function CandidateInterviewContent() {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Begin Interview Handler
-  const handleStartInterview = (e: React.FormEvent) => {
+  // Begin Voice Interview Handler
+  const handleStartInterview = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!invitation) return;
+
+    if (!isVoiceSupported) {
+      return;
+    }
+
+    if (permissionState !== 'granted') {
+      const granted = await requestMicrophone();
+      if (!granted) {
+        return;
+      }
+    }
 
     const updated = startCandidateInterview(token, {
       fullName: candidateName.trim() || 'Candidate',
@@ -148,96 +258,165 @@ function CandidateInterviewContent() {
     }
   };
 
-  // Submit Current Answer
-  const handleAnswerSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!invitation || isEvaluating) return;
+  // Submit Current Spoken Answer
+  const handleAnswerSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!invitation || isEvaluating || isSubmittingRef.current) return;
 
-    const trimmed = currentAnswer.trim();
-    const wordCount = trimmed.split(/\s+/).filter(Boolean).length;
+    const spokenText = (currentAnswer || finalTranscript).trim();
+    const wordCount = spokenText.split(/\s+/).filter(Boolean).length;
 
     if (wordCount < 4) {
-      setAnswerValidationError('Please provide a more complete response (at least 4 words) before continuing.');
+      setAnswerValidationError('Please speak a more complete response (at least 4 words) before submitting.');
       return;
     }
 
     setAnswerValidationError(null);
     setIsEvaluating(true);
+    isSubmittingRef.current = true;
+    stopListening();
 
     const currentQ = invitation.questions[currentQuestionIndex];
     const timeSpent = Math.max(10, Math.round((Date.now() - (questionStartTime || Date.now())) / 1000));
     const newTotalSeconds = elapsedSeconds + timeSpent;
 
-    // Save answer into storage
-    submitCandidateAnswer(token, currentQ.id, currentQ.text, trimmed, timeSpent, newTotalSeconds);
+    submitCandidateAnswer(token, currentQ.id, currentQ.text, spokenText, timeSpent, newTotalSeconds);
 
-    // Simulate AI interviewer review and step
-    setTimeout(() => {
-      const isLast = currentQuestionIndex + 1 >= invitation.questions.length;
-      const feedback = generateMockFeedbackForAnswer(
-        currentQ,
-        trimmed,
-        currentQuestionIndex,
-        invitation.questions.length
-      );
+    try {
+      const res = await fetch(`/api/interviews/${token}/interact`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          questionId: currentQ.id,
+          answerText: spokenText,
+          timeSpentSeconds: timeSpent,
+          totalElapsedSeconds: newTotalSeconds,
+        })
+      });
 
-      if (isLast) {
-        completeCandidateInterview(token, newTotalSeconds);
-        setIsSubmitted(true);
-        setIsEvaluating(false);
-      } else {
+      if (res.ok) {
+        const data = await res.json();
+        if (data.isInterviewComplete) {
+          completeCandidateInterview(token, newTotalSeconds);
+          setIsSubmitted(true);
+          setIsEvaluating(false);
+          isSubmittingRef.current = false;
+          return;
+        }
+
+        const updatedQuestions = [...invitation.questions];
+        if (data.hasFollowUp && data.followUpQuestion) {
+          updatedQuestions.splice(currentQuestionIndex + 1, 0, data.followUpQuestion);
+          setInvitation(prev => prev ? { ...prev, questions: updatedQuestions } : null);
+        }
+
         setCurrentQuestionIndex(prev => prev + 1);
         setCurrentAnswer('');
-        setInterviewerNote(feedback);
+        resetTranscript();
+        setInterviewerNote(data.interviewerFeedback || 'Thank you for your response.');
         setShowHint(false);
         setQuestionStartTime(Date.now());
         setIsEvaluating(false);
+        isSubmittingRef.current = false;
+        return;
       }
-    }, 600);
+    } catch {
+      console.warn('Interviewer interaction endpoint unreachable, using fallback.');
+    }
+
+    // Fallback if offline or API unreachable
+    const isLast = currentQuestionIndex + 1 >= invitation.questions.length;
+    const feedback = generateMockFeedbackForAnswer(
+      currentQ,
+      spokenText,
+      currentQuestionIndex,
+      invitation.questions.length
+    );
+
+    if (isLast) {
+      completeCandidateInterview(token, newTotalSeconds);
+      setIsSubmitted(true);
+      setIsEvaluating(false);
+      isSubmittingRef.current = false;
+    } else {
+      setCurrentQuestionIndex(prev => prev + 1);
+      setCurrentAnswer('');
+      resetTranscript();
+      setInterviewerNote(feedback);
+      setShowHint(false);
+      setQuestionStartTime(Date.now());
+      setIsEvaluating(false);
+      isSubmittingRef.current = false;
+    }
   };
+
+  const handleCopyLink = () => {
+    if (typeof window !== 'undefined') {
+      navigator.clipboard.writeText(window.location.href);
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2500);
+    }
+  };
+
+  // Determine current VoiceVisualizer status
+  const visualizerStatus: VoiceVisualizerStatus = isEvaluating
+    ? 'processing'
+    : isAiSpeaking
+    ? 'ai_speaking'
+    : isPaused
+    ? 'paused'
+    : (voiceErrorMessage && !isListening)
+    ? 'error'
+    : isListening
+    ? 'listening'
+    : permissionState === 'denied' || permissionState === 'unavailable'
+    ? 'unavailable'
+    : permissionState === 'requesting'
+    ? 'preparing'
+    : 'idle';
 
   // Loading Screen
   if (isLoading) {
     return (
-      <div className="flex-1 flex items-center justify-center p-12 bg-slate-50 min-h-[60vh]">
+      <div className="flex-1 flex items-center justify-center p-12 bg-white min-h-[60vh]">
         <div className="text-center space-y-3">
-          <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-sm font-medium text-slate-600">Verifying invitation token...</p>
+          <div className="w-8 h-8 border-2 border-zinc-900 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-xs font-mono text-zinc-500">Verifying assessment token...</p>
         </div>
       </div>
     );
   }
 
-  // STEP 1: Error States (Invalid, Expired, Completed, Revoked)
+  // STEP 1: Error States
   if (errorType) {
     const errorConfigs = {
       invalid: {
-        title: 'Invalid interview invitation.',
-        desc: 'The interview invitation link you entered is invalid or could not be found. Please check the URL or contact your hiring recruiter.',
+        title: 'Invalid assessment token',
+        desc: 'The interview invitation link you opened is invalid or could not be found. Please check the URL or contact your hiring recruiter.',
         icon: AlertCircle,
         badge: 'Link Not Found',
         badgeColor: 'bg-rose-50 text-rose-700 border-rose-200',
       },
       expired: {
-        title: 'This interview invitation has expired.',
-        desc: 'The time window allocated for this interview session has passed. Please contact the recruiter or hiring manager to request a new invitation link.',
+        title: 'This assessment link has expired',
+        desc: 'The time window allocated for this interview session has passed. Please contact the recruiter to request a fresh invitation link.',
         icon: Clock,
-        badge: 'Expired Link',
+        badge: 'Expired Token',
         badgeColor: 'bg-amber-50 text-amber-700 border-amber-200',
       },
       completed: {
-        title: 'This interview has already been completed.',
-        desc: 'Your assessment responses have already been recorded and securely submitted to the hiring team. Candidates cannot retake a completed session.',
+        title: 'Assessment already completed',
+        desc: 'Your assessment responses have already been recorded and securely submitted to the hiring team. Candidate submissions cannot be modified.',
         icon: CheckCircle2,
-        badge: 'Assessment Complete',
+        badge: 'Submitted & Locked',
         badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
       },
       revoked: {
-        title: 'This interview invitation has been revoked.',
-        desc: 'This invitation was cancelled or revoked by the recruiter. Please contact your hiring coordinator for assistance.',
+        title: 'Assessment invitation revoked',
+        desc: 'This invitation was cancelled or revoked by the hiring organization. Please contact your hiring coordinator for assistance.',
         icon: Lock,
-        badge: 'Link Revoked',
-        badgeColor: 'bg-slate-100 text-slate-700 border-slate-300',
+        badge: 'Token Revoked',
+        badgeColor: 'bg-zinc-100 text-zinc-700 border-zinc-200',
       },
     };
 
@@ -245,28 +424,28 @@ function CandidateInterviewContent() {
     const Icon = cfg.icon;
 
     return (
-      <div className="py-16 md:py-24 bg-slate-50 flex-1 flex items-center justify-center px-4">
-        <div className="ui-card-container">
-          <div className="ui-card p-8 text-center space-y-6">
-            <div className="w-14 h-14 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-center mx-auto text-slate-700">
-              <Icon className="w-7 h-7 text-indigo-600" />
+      <div className="py-20 md:py-28 bg-[#fcfcfd] flex-1 flex items-center justify-center px-4">
+        <div className="ui-card-container w-full">
+          <div className="ui-card p-8 sm:p-9 text-center space-y-5">
+            <div className="w-12 h-12 rounded-xl bg-zinc-100 border border-zinc-200/80 flex items-center justify-center mx-auto text-zinc-800">
+              <Icon className="w-6 h-6 text-zinc-800" />
             </div>
 
             <div className="space-y-2">
-              <span className={`inline-flex items-center text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border ${cfg.badgeColor}`}>
+              <span className={`inline-flex items-center text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded border ${cfg.badgeColor}`}>
                 {cfg.badge}
               </span>
-              <h1 className="text-xl font-bold text-slate-900 tracking-tight">
+              <h1 className="text-xl font-semibold text-zinc-950 tracking-tight">
                 {cfg.title}
               </h1>
-              <p className="text-xs text-slate-600 leading-relaxed">
+              <p className="text-xs text-zinc-600 leading-relaxed max-w-sm mx-auto">
                 {cfg.desc}
               </p>
             </div>
 
-            <div className="pt-2 border-t border-slate-100">
-              <p className="text-[11px] text-slate-400">
-                Token reference: <code className="font-mono text-slate-600">{token}</code>
+            <div className="pt-3 border-t border-zinc-100">
+              <p className="text-[11px] font-mono text-zinc-400">
+                Token reference: <span className="text-zinc-600 font-semibold">{token}</span>
               </p>
             </div>
           </div>
@@ -277,51 +456,51 @@ function CandidateInterviewContent() {
 
   if (!invitation) return null;
 
-  // STEP 5: Final Submission Screen (Clean confirmation, no recruiter evaluation exposed)
+  // STEP 5: Final Submission Screen
   if (isSubmitted) {
     return (
-      <div className="py-16 md:py-24 bg-slate-50 flex-1 flex items-center justify-center px-4">
-        <div className="ui-card-container">
+      <div className="py-20 md:py-28 bg-[#fcfcfd] flex-1 flex items-center justify-center px-4">
+        <div className="ui-card-container w-full">
           <div className="ui-card p-8 sm:p-10 text-center space-y-6">
-            <div className="w-16 h-16 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center mx-auto shadow-xs">
-              <CheckCircle2 className="w-8 h-8" />
+            <div className="w-14 h-14 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center mx-auto shadow-2xs">
+              <CheckCircle2 className="w-7 h-7" />
             </div>
 
             <div className="space-y-2">
-              <span className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                <Check className="w-3.5 h-3.5" /> Assessment Received
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-medium">
+                <Check className="w-3 h-3" /> Submission Received
               </span>
-              <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
-                Your interview has been submitted successfully.
+              <h1 className="text-2xl font-semibold text-zinc-950 tracking-tight">
+                Your assessment has been submitted.
               </h1>
-              <p className="text-sm text-slate-600 leading-relaxed">
-                Thank you, <strong className="text-slate-900">{candidateName}</strong>! Your answers for the{' '}
-                <strong className="text-slate-900">{invitation.jobConfig.jobTitle}</strong> position have been securely encrypted and forwarded to the hiring team at{' '}
-                <strong className="text-slate-900">{invitation.jobConfig.companyName || 'the hiring company'}</strong>.
+              <p className="text-xs sm:text-sm text-zinc-600 leading-relaxed max-w-md mx-auto">
+                Thank you, <strong className="text-zinc-900 font-semibold">{candidateName}</strong>. Your technical responses for the{' '}
+                <strong className="text-zinc-900 font-semibold">{invitation.jobConfig.jobTitle}</strong> position have been securely encrypted and delivered to the hiring team at{' '}
+                <strong className="text-zinc-900 font-semibold">{invitation.jobConfig.companyName || 'the hiring organization'}</strong>.
               </p>
             </div>
 
-            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600 text-left space-y-2">
-              <div className="flex justify-between font-medium">
-                <span>Company:</span>
-                <span className="text-slate-900 font-bold">{invitation.jobConfig.companyName || 'IntervueAI Client'}</span>
+            <div className="p-4 rounded-xl bg-zinc-50 border border-zinc-200/80 text-xs text-zinc-700 text-left space-y-2 font-mono">
+              <div className="flex justify-between">
+                <span className="text-zinc-500 font-sans">Company:</span>
+                <span className="text-zinc-900 font-semibold font-sans">{invitation.jobConfig.companyName || 'IntervueAI Client'}</span>
               </div>
-              <div className="flex justify-between font-medium">
-                <span>Role:</span>
-                <span className="text-slate-900 font-bold">{invitation.jobConfig.jobTitle}</span>
+              <div className="flex justify-between">
+                <span className="text-zinc-500 font-sans">Role Track:</span>
+                <span className="text-zinc-900 font-semibold font-sans">{invitation.jobConfig.jobTitle}</span>
               </div>
-              <div className="flex justify-between font-medium">
-                <span>Questions Answered:</span>
-                <span className="text-slate-900 font-bold">{invitation.questions.length}</span>
+              <div className="flex justify-between">
+                <span className="text-zinc-500 font-sans">Questions Completed:</span>
+                <span className="text-zinc-900 font-semibold">{invitation.questions.length} / {invitation.questions.length}</span>
               </div>
-              <div className="flex justify-between font-medium">
-                <span>Completion Duration:</span>
-                <span className="text-slate-900 font-bold">{formatTimer(elapsedSeconds)}</span>
+              <div className="flex justify-between">
+                <span className="text-zinc-500 font-sans">Total Session Duration:</span>
+                <span className="text-zinc-900 font-semibold">{formatTimer(elapsedSeconds)}</span>
               </div>
             </div>
 
-            <p className="text-xs text-slate-500">
-              The recruiting team will review your submission and reach out regarding subsequent steps. You may safely close this window.
+            <p className="text-xs text-zinc-500 font-normal">
+              The recruiting team will evaluate your recorded responses and qualitative evaluation. You may safely close this tab.
             </p>
           </div>
         </div>
@@ -329,54 +508,58 @@ function CandidateInterviewContent() {
     );
   }
 
-  // STEP 2: Candidate Invitation Experience
-  // When a candidate opens the link, they see ONLY:
-  // 1. Candidate's pre-filled name.
-  // 2. Candidate's pre-filled email address.
-  // 3. Company name and description.
-  // 4. Job role.
-  // 5. Job description.
-  // 6. Start Interview button.
-  // Nothing else. All configuration options removed from candidate side.
+  // STEP 2: Candidate Invitation Experience (Pre-interview Welcome)
   if (!hasStarted) {
     const { jobConfig } = invitation;
 
     return (
-      <div className="py-16 md:py-24 bg-slate-50 flex-1 flex items-center justify-center px-4">
+      <div className="py-14 md:py-20 bg-[#fcfcfd] flex-1 flex items-center justify-center px-4">
         <div className="ui-card-container w-full">
-          <div className="ui-card p-6 sm:p-8 space-y-6 shadow-sm">
-            {/* 3. Company Name & 4. Job Role */}
-            <div className="text-center space-y-2 border-b border-slate-100 pb-5">
-              <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center mx-auto shadow-xs mb-3">
-                <Bot className="w-6 h-6" />
+          <div className="ui-card p-6 sm:p-8 space-y-6">
+            {/* Company & Role */}
+            <div className="text-center space-y-2 border-b border-zinc-100 pb-5">
+              <div className="w-10 h-10 rounded-xl bg-zinc-950 text-white flex items-center justify-center mx-auto shadow-xs mb-3">
+                <svg className="w-5 h-5 text-zinc-100" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2v20M17 5v14M7 8v8M22 10v4M2 10v4" />
+                </svg>
               </div>
-              <div className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700">
-                <Building className="w-3.5 h-3.5 text-indigo-600" />
+              <div className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded bg-zinc-100 text-zinc-700 border border-zinc-200/70">
+                <Building className="w-3.5 h-3.5 text-zinc-500" />
                 <span>{jobConfig.companyName || 'Hiring Assessment'}</span>
               </div>
-              <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+              <h1 className="text-2xl font-semibold text-zinc-950 tracking-tight">
                 {jobConfig.jobTitle}
               </h1>
-              <p className="text-xs text-slate-500 font-medium">
-                {jobConfig.seniorityLevel} Position Assessment
+              <p className="text-xs text-zinc-500 font-mono">
+                {jobConfig.seniorityLevel} Technical Screen • {invitation.questions.length} Questions
               </p>
             </div>
 
-            {/* 5. Job Description & Company Details */}
-            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700 space-y-1.5">
-              <span className="font-bold text-slate-800 uppercase tracking-wider text-[11px] block">
-                Job Description
+            {/* Job Description */}
+            <div className="p-4 rounded-xl bg-zinc-50 border border-zinc-200/80 text-xs text-zinc-700 space-y-1.5">
+              <span className="font-mono uppercase tracking-wider text-[11px] text-zinc-500 block">
+                Position Summary
               </span>
-              <p className="leading-relaxed whitespace-pre-line text-slate-600">
+              <p className="leading-relaxed whitespace-pre-line text-zinc-600">
                 {jobConfig.jobDescription}
               </p>
             </div>
 
-            {/* 1. Candidate Name, 2. Candidate Email & 6. Start Interview Button */}
-            <form onSubmit={handleStartInterview} className="space-y-4">
-              {/* Pre-filled Name */}
+            {/* Voice-Only Format Notice */}
+            <div className="p-3.5 rounded-xl bg-zinc-50 border border-zinc-200/80 text-xs text-zinc-800 flex items-start gap-2.5">
+              <Mic className="w-4 h-4 text-zinc-900 shrink-0 mt-0.5" />
               <div>
-                <label htmlFor="candidateOnboardingName" className="block text-xs font-semibold text-slate-700 mb-1.5">
+                <p className="font-semibold text-zinc-900">Voice-Only Experience</p>
+                <p className="text-zinc-600 text-[11px] leading-relaxed mt-0.5">
+                  The AI interviewer will vocalize each technical prompt. Speak your answer into your microphone; speech is transcribed in real-time for your review before each submission.
+                </p>
+              </div>
+            </div>
+
+            {/* Candidate Details & Start Button */}
+            <form onSubmit={handleStartInterview} className="space-y-4">
+              <div>
+                <label htmlFor="candidateOnboardingName" className="block text-xs font-medium text-zinc-700 mb-1">
                   Candidate Name
                 </label>
                 <input
@@ -388,9 +571,8 @@ function CandidateInterviewContent() {
                 />
               </div>
 
-              {/* Pre-filled Email */}
               <div>
-                <label htmlFor="candidateOnboardingEmail" className="block text-xs font-semibold text-slate-700 mb-1.5">
+                <label htmlFor="candidateOnboardingEmail" className="block text-xs font-medium text-zinc-700 mb-1">
                   Candidate Email
                 </label>
                 <input
@@ -398,17 +580,17 @@ function CandidateInterviewContent() {
                   type="email"
                   readOnly
                   value={candidateEmail}
-                  className="ui-input font-medium"
+                  className="ui-input font-medium font-mono text-xs"
                 />
               </div>
 
-              {/* Start Interview Button */}
+              {/* Start Interview Action */}
               <div className="pt-2">
                 <button
                   type="submit"
-                  className="ui-btn-primary w-full text-sm font-bold shadow-md hover:shadow-indigo-200"
+                  className="ui-btn-primary w-full text-sm font-medium shadow-sm h-11"
                 >
-                  <span>Start Interview</span>
+                  <span>Begin Voice Assessment</span>
                   <ArrowRight className="w-4 h-4" />
                 </button>
               </div>
@@ -419,119 +601,241 @@ function CandidateInterviewContent() {
     );
   }
 
-  // STEP 4: Active Professional Interview Stage
+  // Active Interview Stage
   const currentQ = invitation.questions[currentQuestionIndex];
   const progressPercent = Math.round(((currentQuestionIndex) / invitation.questions.length) * 100);
-  const wordCount = currentAnswer.trim().split(/\s+/).filter(Boolean).length;
+  const wordCount = (currentAnswer || finalTranscript).trim().split(/\s+/).filter(Boolean).length;
+  const charCount = (currentAnswer || finalTranscript).trim().length;
 
   return (
-    <div className="flex-1 flex flex-col bg-slate-50 min-h-full">
-      {/* Top Session Progress Bar */}
-      <div className="bg-white border-b border-slate-200 sticky top-16 z-40">
-        <div className="ui-form-container h-14 flex items-center justify-between">
+    <div className="flex-1 flex flex-col bg-[#fcfcfd] min-h-full">
+      {/* Top Session Information Bar */}
+      <div className="bg-white border-b border-zinc-200/80 sticky top-14 z-40">
+        <div className="ui-form-container h-12 flex items-center justify-between">
+          {/* Question Counter & Context */}
           <div className="flex items-center gap-3">
-            <span className="text-xs font-bold text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-md border border-indigo-100">
+            <span className="text-xs font-mono font-medium text-zinc-800 bg-zinc-100 px-2.5 py-0.5 rounded border border-zinc-200/60">
               Question {currentQuestionIndex + 1} of {invitation.questions.length}
             </span>
-            <div className="hidden sm:flex items-center gap-2 text-xs text-slate-600 font-medium">
+            <div className="hidden sm:flex items-center gap-2 text-xs text-zinc-600 font-medium">
               <span>{invitation.jobConfig.jobTitle}</span>
-              <span className="text-slate-300">•</span>
-              <span>{invitation.jobConfig.companyName}</span>
+              <span className="text-zinc-300">•</span>
+              <span className="text-zinc-500">{invitation.jobConfig.companyName}</span>
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-1.5 text-xs font-mono font-semibold text-slate-700 bg-slate-100 px-3 py-1 rounded-lg">
-              <Clock className="w-3.5 h-3.5 text-slate-500" />
+          {/* Timer & End Interview Action */}
+          <div className="flex items-center gap-3">
+            <div 
+              className="flex items-center gap-1.5 text-xs font-mono font-medium text-zinc-800 bg-zinc-50 border border-zinc-200/70 px-2.5 py-0.5 rounded-md"
+              title="Elapsed interview time"
+            >
+              <Clock className="w-3.5 h-3.5 text-zinc-500" />
               <span>{formatTimer(elapsedSeconds)}</span>
             </div>
 
             <button
               type="button"
               onClick={() => setShowExitModal(true)}
-              className="text-xs font-medium text-slate-500 hover:text-rose-600 flex items-center gap-1 transition-colors"
+              className="text-xs font-medium text-zinc-500 hover:text-rose-600 flex items-center gap-1 transition-colors"
+              title="Conclude interview early"
             >
               <LogOut className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">End Interview</span>
+              <span className="hidden sm:inline">End Session</span>
             </button>
           </div>
         </div>
 
-        {/* Progress bar */}
-        <div className="w-full bg-slate-100 h-1">
+        {/* Minimal Progress Line */}
+        <div className="w-full bg-zinc-100 h-0.5">
           <div
-            className="bg-indigo-600 h-1 transition-all duration-300"
+            className="bg-zinc-950 h-0.5 transition-all duration-300"
             style={{ width: `${progressPercent}%` }}
           />
         </div>
       </div>
 
-      {/* Main Interview Stage */}
-      <div className="flex-1 ui-form-container py-8 space-y-6">
-        {/* Initial Greeting or Follow-up Feedback Notice */}
+      {/* Main Voice Interview Stage */}
+      <div className="flex-1 ui-form-container py-8 space-y-5">
+        {/* Browser Unsupported Notice */}
+        {!isVoiceSupported && (
+          <div className="p-5 rounded-xl bg-amber-50 border border-amber-200 text-amber-950 space-y-3 shadow-2xs">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <h3 className="font-semibold text-xs text-amber-900">
+                  Voice Speech Recognition Not Supported in this Browser
+                </h3>
+                <p className="text-xs text-amber-800 leading-relaxed">
+                  IntervueAI is a voice-only assessment platform requiring browser speech-to-text and audio synthesis. Your current browser does not support the Web Speech API.
+                </p>
+                <p className="text-xs text-amber-900 font-medium pt-1">
+                  Please open this invitation link in <strong>Google Chrome</strong>, <strong>Microsoft Edge</strong>, or <strong>Apple Safari</strong>.
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-1 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleCopyLink}
+                className="ui-btn-secondary h-8 px-3 text-xs font-medium bg-white text-zinc-700 border-amber-300 hover:bg-amber-100 flex items-center gap-1.5"
+              >
+                {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-zinc-500" />}
+                <span>{copiedLink ? 'Link Copied!' : 'Copy Invitation Link'}</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Microphone Permission Required Banner */}
+        {isVoiceSupported && permissionState !== 'granted' && (
+          <div className="p-5 rounded-xl bg-amber-50 border border-amber-200 text-amber-950 space-y-3 shadow-2xs">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-lg bg-amber-100 flex items-center justify-center text-amber-700 shrink-0">
+                <MicOff className="w-4 h-4" />
+              </div>
+              <div className="space-y-1 flex-1">
+                <h3 className="font-semibold text-xs text-amber-900">
+                  Microphone Access Required for Voice Assessment
+                </h3>
+                <p className="text-xs text-amber-800 leading-relaxed">
+                  This interview is conducted entirely through voice. To answer questions, please grant your browser permission to access your microphone.
+                </p>
+
+                {permissionState === 'denied' && (
+                  <div className="p-3 bg-white/70 rounded-lg border border-amber-200 text-[11px] text-amber-900 space-y-1">
+                    <p className="font-semibold">How to enable microphone access:</p>
+                    <ol className="list-decimal list-inside space-y-0.5 text-amber-800">
+                      <li>Click the lock or camera icon on the left of your browser address bar.</li>
+                      <li>Set <strong>Microphone</strong> to <strong>Allow</strong>.</li>
+                      <li>Click <strong>Retry Microphone Access</strong> below.</li>
+                    </ol>
+                  </div>
+                )}
+
+                {voiceErrorMessage && (
+                  <p className="text-[11px] text-rose-600 font-medium font-mono">
+                    {voiceErrorMessage}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={requestMicrophone}
+                className="ui-btn-primary h-8 px-3.5 text-xs font-medium bg-amber-800 hover:bg-amber-900 text-white"
+              >
+                <span>{permissionState === 'denied' ? 'Retry Microphone Access' : 'Allow Microphone'}</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Voice Interaction Section */}
+        {isVoiceSupported && permissionState === 'granted' && (
+          <div className="space-y-3">
+            <VoiceVisualizer
+              status={visualizerStatus}
+              isAiSpeaking={isAiSpeaking}
+              isListening={isListening}
+              isPaused={isPaused}
+              audioLevel={audioLevel}
+              onInterrupt={interruptAi}
+              onReplay={handleReplayQuestion}
+              onTogglePause={togglePause}
+              onRetry={retryRecognition}
+              disabled={isEvaluating}
+            />
+
+            {/* Speech Recognition Error Notice with One-Click Retry */}
+            {voiceErrorMessage && !isListening && (
+              <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-amber-700 shrink-0" />
+                  <span className="font-medium text-amber-900">{voiceErrorMessage}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={retryRecognition}
+                  className="ui-btn-primary h-7 px-3 text-xs font-medium shrink-0 self-start sm:self-auto"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  <span>Retry Engine</span>
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Initial Greeting Banner on Question 1 */}
         {currentQuestionIndex === 0 && !interviewerNote && (
-          <div className="p-4 rounded-xl bg-indigo-50 border border-indigo-200 text-xs text-indigo-950 flex items-start gap-3">
-            <Bot className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />
+          <div className="p-4 rounded-xl bg-zinc-50 border border-zinc-200/80 text-xs text-zinc-900 flex items-start gap-3">
+            <Volume2 className="w-4 h-4 text-zinc-700 shrink-0 mt-0.5" />
             <div>
-              <p className="font-semibold text-indigo-900 mb-0.5">AI Interviewer Greeting:</p>
-              <p className="leading-relaxed">{getCandidateGreeting(invitation.jobConfig, candidateName)}</p>
+              <p className="font-semibold text-zinc-900 mb-0.5">Interviewer Welcome:</p>
+              <p className="leading-relaxed text-zinc-600">{getCandidateGreeting(invitation.jobConfig, candidateName)}</p>
             </div>
           </div>
         )}
 
+        {/* Adaptive Interviewer Follow-up Feedback Note */}
         {interviewerNote && (
-          <div className="p-4 rounded-xl bg-indigo-50 border border-indigo-200 text-xs text-indigo-950 flex items-start gap-3 animate-fadeIn">
-            <Bot className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />
+          <div className="p-4 rounded-xl bg-zinc-50 border border-zinc-200/80 text-xs text-zinc-900 flex items-start gap-3">
+            <Volume2 className="w-4 h-4 text-zinc-700 shrink-0 mt-0.5" />
             <div>
-              <p className="font-semibold text-indigo-900 mb-0.5">Interviewer Note:</p>
-              <p className="leading-relaxed">{interviewerNote}</p>
+              <p className="font-semibold text-zinc-900 mb-0.5">Interviewer Note:</p>
+              <p className="leading-relaxed text-zinc-600">{interviewerNote}</p>
             </div>
           </div>
         )}
 
-        {/* Current Question Card */}
+        {/* AI Interviewer Section: Current Question Card */}
         <div className="ui-card p-6 sm:p-7 space-y-4">
           <div className="flex items-start gap-4">
-            <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-600 flex items-center justify-center text-white shrink-0 shadow-xs">
-              <Bot className="w-5 h-5" />
+            <div className="w-9 h-9 rounded-lg bg-zinc-950 text-white flex items-center justify-center shrink-0 shadow-2xs font-mono text-xs font-semibold">
+              Q{currentQuestionIndex + 1}
             </div>
 
-            <div className="flex-1 space-y-2">
+            <div className="flex-1 space-y-2.5">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-xs font-bold text-slate-900">
-                  IntervueAI Assessment
+                <span className="text-xs font-medium text-zinc-500">
+                  Question Prompt
                 </span>
-                <span className="inline-flex items-center text-[11px] font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
+                <span className="inline-flex items-center text-xs px-2 py-0.5 rounded bg-zinc-100 text-zinc-700 border border-zinc-200/60">
                   {currentQ.category}
                 </span>
               </div>
 
-              <h2 className="text-lg sm:text-xl font-bold text-slate-900 leading-snug">
+              <h2 className="text-lg sm:text-xl font-semibold text-zinc-950 leading-snug tracking-tight">
                 {currentQ.text}
               </h2>
 
+              {/* Optional context */}
               {currentQ.context && (
-                <p className="text-xs sm:text-sm text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-100 leading-relaxed">
-                  💡 <strong className="font-semibold text-slate-800">Context:</strong> {currentQ.context}
+                <p className="text-xs sm:text-sm text-zinc-600 bg-zinc-50 p-3 rounded-lg border border-zinc-200/70 leading-relaxed font-sans">
+                  💡 <strong className="font-semibold text-zinc-900">Context:</strong> {currentQ.context}
                 </p>
               )}
 
-              {/* Guidelines toggle */}
+              {/* Optional response structure hints toggle */}
               {currentQ.sampleHints && currentQ.sampleHints.length > 0 && (
                 <div className="pt-1">
                   <button
                     type="button"
                     onClick={() => setShowHint(!showHint)}
-                    className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition-colors"
+                    className="inline-flex items-center gap-1.5 text-xs font-medium text-zinc-600 hover:text-zinc-950 transition-colors"
                   >
-                    <HelpCircle className="w-3.5 h-3.5" />
-                    {showHint ? 'Hide Response Guidelines' : 'Need guidance on structure?'}
+                    <HelpCircle className="w-3.5 h-3.5 text-zinc-400" />
+                    {showHint ? 'Hide response guidelines' : 'Need guidance on structure?'}
                   </button>
 
                   {showHint && (
-                    <div className="mt-2 p-3 bg-amber-50/60 rounded-xl border border-amber-200/60 text-xs text-amber-950 space-y-1">
-                      <p className="font-bold text-amber-900">Key architectural areas to cover:</p>
-                      <ul className="list-disc list-inside space-y-0.5 text-amber-800">
+                    <div className="mt-2 p-3 bg-zinc-50 rounded-lg border border-zinc-200/80 text-xs text-zinc-800 space-y-1">
+                      <p className="font-semibold text-zinc-900">Recommended technical points to cover:</p>
+                      <ul className="list-disc list-inside space-y-0.5 text-zinc-600">
                         {currentQ.sampleHints.map((hint, hIdx) => (
                           <li key={hIdx}>{hint}</li>
                         ))}
@@ -544,98 +848,138 @@ function CandidateInterviewContent() {
           </div>
         </div>
 
-        {/* Candidate Response Textarea */}
+        {/* Read-Only Transcript Preview & Submission Section */}
         <div className="ui-card p-6 sm:p-7 space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div className="flex items-center justify-between border-b border-zinc-100 pb-3">
             <div className="flex items-center gap-2">
-              <User className="w-4 h-4 text-indigo-600" />
-              <label htmlFor="candidateResponseInput" className="text-sm font-bold text-slate-900 cursor-pointer">
-                Your Response
-              </label>
+              <Mic className="w-4 h-4 text-zinc-700" />
+              <span className="text-xs font-semibold text-zinc-950">
+                Live Voice Transcript
+              </span>
+              <span className="text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-600 border border-zinc-200/70">
+                Read-Only
+              </span>
+              {isListening && (
+                <span className="hidden sm:inline-flex items-center gap-1.5 text-[11px] font-medium text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/80">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
+                  Capturing voice...
+                </span>
+              )}
             </div>
-            <div className="text-xs text-slate-500 font-medium flex items-center gap-2">
+
+            <div className="text-xs text-zinc-500 font-mono flex items-center gap-2">
               <span>{wordCount} words</span>
-              <span className="text-slate-300">•</span>
-              <span>{currentAnswer.length} characters</span>
+              <span className="text-zinc-300">•</span>
+              <span>{charCount} chars</span>
             </div>
           </div>
 
-          <form onSubmit={handleAnswerSubmit} className="space-y-4">
-            <textarea
-              id="candidateResponseInput"
-              rows={8}
-              value={currentAnswer}
-              onChange={(e) => {
-                setCurrentAnswer(e.target.value);
-                if (answerValidationError) setAnswerValidationError(null);
-              }}
-              placeholder="Type your structured answer here. Cover your direct experience, architectural reasoning, trade-offs, and failure handling..."
-              className="w-full p-4 text-sm text-slate-900 bg-slate-50/60 rounded-xl border border-slate-200 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 transition-all resize-y font-sans leading-relaxed"
-            />
-
-            {answerValidationError && (
-              <p className="text-xs text-rose-600 flex items-center gap-1.5 font-medium">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                {answerValidationError}
-              </p>
-            )}
-
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
-              <div className="flex items-center gap-2 text-xs text-slate-500">
-                <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" />
-                <span>Candidate: {candidateName}</span>
-              </div>
-
-              <div className="flex items-center gap-3 w-full sm:w-auto">
-                {currentAnswer && (
-                  <button
-                    type="button"
-                    onClick={() => setCurrentAnswer('')}
-                    className="text-xs text-slate-500 hover:text-slate-700 px-3 py-2 rounded-lg"
-                  >
-                    Clear
-                  </button>
+          {/* Dedicated Read-Only Transcript Container (NO TEXTAREA / NO TYPING) */}
+          <div 
+            className="min-h-[150px] p-4 sm:p-5 rounded-lg bg-zinc-50/80 border border-zinc-200/80 text-sm leading-relaxed text-zinc-900 font-sans select-text transition-all"
+            role="region"
+            aria-live="polite"
+            aria-label="Live Voice Transcript"
+          >
+            {(currentAnswer || finalTranscript || interimTranscript) ? (
+              <div className="space-y-1">
+                <span className="font-normal text-zinc-900">
+                  {currentAnswer || finalTranscript}
+                </span>
+                {interimTranscript && (
+                  <span className="text-zinc-400 italic font-normal">
+                    {' '}{interimTranscript}
+                  </span>
                 )}
-
-                <button
-                  type="submit"
-                  disabled={isEvaluating}
-                  className="ui-btn-primary w-full sm:w-auto"
-                >
-                  {isEvaluating ? (
-                    <span>Logging response...</span>
-                  ) : (
-                    <>
-                      <span>
-                        {currentQuestionIndex + 1 === invitation.questions.length
-                          ? 'Finalize & Submit Interview'
-                          : 'Submit & Next Question'}
-                      </span>
-                      <Send className="w-3.5 h-3.5" />
-                    </>
-                  )}
-                </button>
               </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-28 text-center text-zinc-400 space-y-1.5">
+                <Mic className="w-6 h-6 text-zinc-300 stroke-[1.5]" />
+                <p className="text-xs font-medium text-zinc-500">
+                  {isAiSpeaking 
+                    ? 'AI interviewer is vocalizing prompt. Speak when ready...' 
+                    : isPaused 
+                    ? 'Microphone is paused. Click "Resume Mic" above to speak.' 
+                    : 'Speak into your microphone. Your spoken response is transcribed here.'}
+                </p>
+                <p className="text-[11px] text-zinc-400 font-mono">
+                  Manual typing is disabled. Transcripts are generated strictly from candidate speech.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {answerValidationError && (
+            <p className="text-xs text-rose-600 flex items-center gap-1.5 font-medium">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              {answerValidationError}
+            </p>
+          )}
+
+          {/* Transcript Actions & Submission Controls */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+            <div className="flex items-center gap-2 text-xs text-zinc-500">
+              <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" />
+              <span>Candidate: <strong className="text-zinc-800 font-medium">{candidateName}</strong></span>
             </div>
-          </form>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+              {/* Option to clear and re-speak answer */}
+              {(currentAnswer || finalTranscript) && !isEvaluating && (
+                <button
+                  type="button"
+                  onClick={handleClearTranscript}
+                  className="ui-btn-secondary h-8 px-3 text-xs font-medium text-zinc-700 hover:text-zinc-950 flex items-center gap-1"
+                  title="Clear transcript and speak your answer again"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 text-zinc-400" />
+                  <span>Re-speak Answer</span>
+                </button>
+              )}
+
+              {/* Submit Answer Action */}
+              <button
+                type="button"
+                onClick={() => handleAnswerSubmit()}
+                disabled={isEvaluating || wordCount < 4}
+                className="ui-btn-primary h-8 px-3.5 text-xs font-medium w-full sm:w-auto shadow-2xs"
+              >
+                {isEvaluating ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Evaluating response...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>
+                      {currentQuestionIndex + 1 === invitation.questions.length
+                        ? 'Finalize & Submit Assessment'
+                        : 'Submit Answer'}
+                    </span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
       {/* End Interview Confirmation Modal */}
       {showExitModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl space-y-4">
-            <h3 className="font-bold text-base text-slate-900">End your interview early?</h3>
-            <p className="text-xs text-slate-600 leading-relaxed">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/40 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-xl max-w-sm w-full p-6 shadow-xl space-y-4 border border-zinc-200">
+            <h3 className="font-semibold text-sm text-zinc-950">End your interview early?</h3>
+            <p className="text-xs text-zinc-600 leading-relaxed">
               If you end now, only your submitted questions will be recorded for the recruiter. You will not be able to restart this session.
             </p>
-            <div className="flex items-center justify-end gap-3 pt-2">
+            <div className="flex items-center justify-end gap-2.5 pt-2">
               <button
                 type="button"
                 onClick={() => setShowExitModal(false)}
-                className="ui-btn-secondary h-9 text-xs"
+                className="ui-btn-secondary h-8 text-xs font-medium"
               >
-                Continue Interview
+                Continue Assessment
               </button>
               <button
                 type="button"
@@ -644,7 +988,7 @@ function CandidateInterviewContent() {
                   setIsSubmitted(true);
                   setShowExitModal(false);
                 }}
-                className="h-9 px-4 rounded-xl text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 shadow-xs"
+                className="ui-btn-danger h-8 text-xs font-medium"
               >
                 End & Submit Now
               </button>
@@ -659,10 +1003,10 @@ function CandidateInterviewContent() {
 export default function CandidateInterviewPage() {
   return (
     <React.Suspense fallback={
-      <div className="py-20 flex items-center justify-center bg-slate-50 min-h-[50vh]">
+      <div className="py-20 flex items-center justify-center bg-[#fcfcfd] min-h-[50vh]">
         <div className="text-center space-y-2">
-          <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-xs font-semibold text-slate-500">Loading interview assessment...</p>
+          <div className="w-8 h-8 border-2 border-zinc-900 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-xs font-mono text-zinc-500">Loading interview assessment...</p>
         </div>
       </div>
     }>

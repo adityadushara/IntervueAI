@@ -16,7 +16,9 @@ import {
   ShieldCheck,
   Building,
   User,
-  Sliders
+  Sliders,
+  CheckCircle2,
+  Lock
 } from 'lucide-react';
 import { 
   JobConfiguration, 
@@ -26,16 +28,23 @@ import {
   InterviewDifficulty, 
   ExpirationOption,
   InterviewInvitation,
-  CandidateInfo 
+  CandidateInfo,
+  StructuredInterviewPlan,
+  InterviewQuestion 
 } from '@/types/interview';
 import { SAMPLE_JOB_TITLES, DEFAULT_SKILLS_BY_ROLE } from '@/lib/mockData';
-import { createInterview } from '@/lib/storage';
+import { 
+  createInterview, 
+  getInterviews,
+  saveInterviews 
+} from '@/lib/storage';
 
 export default function CreateInterviewPage() {
   // Company & Candidate Details
   const [companyName, setCompanyName] = useState('Acme Global Tech');
   const [candidateName, setCandidateName] = useState('Jordan Lee');
   const [candidateEmail, setCandidateEmail] = useState('jordan.lee@example.com');
+  const [isGenerating, setIsGenerating] = useState(false);
 
   // Job Details State
   const [jobTitle, setJobTitle] = useState('Frontend Developer');
@@ -63,11 +72,15 @@ export default function CreateInterviewPage() {
   const [createdInvitation, setCreatedInvitation] = useState<InterviewInvitation | null>(null);
   const [copied, setCopied] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [serverError, setServerError] = useState<string | null>(null);
   const [baseUrl, setBaseUrl] = useState('http://localhost:3000');
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (typeof window !== 'undefined') {
+      const canonicalUrl = process.env.NEXT_PUBLIC_APP_URL;
+      if (canonicalUrl) {
+        setBaseUrl(canonicalUrl.replace(/\/$/, ''));
+      } else if (typeof window !== 'undefined') {
         setBaseUrl(window.location.origin);
       }
     }, 0);
@@ -136,9 +149,11 @@ export default function CreateInterviewPage() {
     return Object.keys(errs).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validate()) return;
+    if (!validate() || isGenerating) return;
+
+    setIsGenerating(true);
 
     const jobConfig: JobConfiguration = {
       companyName: companyName.trim(),
@@ -163,9 +178,71 @@ export default function CreateInterviewPage() {
       email: candidateEmail.trim(),
     };
 
-    const newInv = createInterview(jobConfig, linkConfig, candidateInfo);
-    setCreatedInvitation(newInv);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    let planData: StructuredInterviewPlan | undefined = undefined;
+    let customQuestions: InterviewQuestion[] | undefined = undefined;
+
+    try {
+      const planRes = await fetch('/api/interviews/plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobConfig })
+      });
+      if (planRes.ok) {
+        const json = await planRes.json();
+        if (json.plan) {
+          planData = json.plan;
+          customQuestions = json.questions;
+        }
+      }
+    } catch {
+      // Fallback cleanly if offline or server endpoint unreachable
+    }
+
+    const jobConfigWithPlan: JobConfiguration = {
+      ...jobConfig,
+      structuredPlan: planData,
+    };
+
+    const newInv = createInterview(jobConfigWithPlan, linkConfig, candidateInfo, customQuestions, { skipSync: true });
+    setServerError(null);
+
+    // Authoritative Server Persistence Check
+    try {
+      const res = await fetch('/api/interviews', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newInv),
+      });
+
+      if (!res.ok) {
+        // Rollback from local cache so failed/unauthorized creation does not display phantom links on dashboard
+        const local = getInterviews();
+        saveInterviews(local.filter(i => i.id !== newInv.id && i.token !== newInv.token));
+        const errData = await res.json().catch(() => ({}));
+        setServerError(errData.error || `Server error (HTTP ${res.status}): Failed to save interview invitation.`);
+        setIsGenerating(false);
+        return;
+      }
+
+      const savedRecord = await res.json();
+      const finalRecord: InterviewInvitation = { 
+        ...newInv, 
+        id: savedRecord.id || newInv.id,
+        createdAt: savedRecord.createdAt || newInv.createdAt,
+        expiresAt: savedRecord.expiresAt || newInv.expiresAt,
+      };
+      
+      const local = getInterviews();
+      saveInterviews([finalRecord, ...local.filter(i => i.id !== finalRecord.id)]);
+      setCreatedInvitation(finalRecord);
+    } catch (netErr) {
+      const local = getInterviews();
+      saveInterviews(local.filter(i => i.id !== newInv.id && i.token !== newInv.token));
+      setServerError(netErr instanceof Error ? netErr.message : 'Network error connecting to interview API');
+    } finally {
+      setIsGenerating(false);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   };
 
   const handleCopyLink = () => {
@@ -177,21 +254,21 @@ export default function CreateInterviewPage() {
   };
 
   return (
-    <div className="py-10 md:py-16 bg-slate-50 flex-1">
+    <div className="py-10 md:py-16 bg-[#fcfcfd] flex-1">
       <div className="ui-form-container space-y-8">
         {/* Header */}
         <div className="space-y-2">
-          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-indigo-600">
-            <Sliders className="w-4 h-4" />
-            <span>Recruiter Setup</span>
+          <div className="flex items-center gap-2 text-xs font-medium text-zinc-500">
+            <Sliders className="w-3.5 h-3.5 text-zinc-400" />
+            <span>Assessment Calibration</span>
           </div>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
-                Create New Interview
+              <h1 className="text-2xl sm:text-3xl font-semibold text-zinc-950 tracking-tight">
+                Create New Assessment
               </h1>
-              <p className="text-slate-600 text-sm mt-1">
-                Configure candidate details, job requirements, and time limits to generate a unique interview invitation.
+              <p className="text-zinc-500 text-xs sm:text-sm mt-0.5">
+                Calibrate technical criteria, specify candidate details, and generate a cryptographically signed assessment URL.
               </p>
             </div>
 
@@ -199,60 +276,78 @@ export default function CreateInterviewPage() {
             <button
               type="button"
               onClick={loadAcceptanceTestPreset}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 transition-colors shadow-2xs self-start sm:self-auto"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white text-zinc-800 border border-zinc-200/90 hover:bg-zinc-50 transition-colors shadow-2xs self-start sm:self-auto"
             >
-              <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-              <span>Frontend Dev Preset (10 Qs)</span>
+              <Sparkles className="w-3.5 h-3.5 text-zinc-500" />
+              <span>Load Frontend Dev (10 Qs)</span>
             </button>
           </div>
         </div>
 
-        {/* Success Modal / Display Card after Link Generation */}
+        {/* Server Error Alert Banner */}
+        {serverError && (
+          <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start gap-3 shadow-2xs">
+            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <h4 className="font-semibold text-rose-900">Unable to generate assessment</h4>
+              <p className="mt-0.5 text-rose-700">{serverError}</p>
+            </div>
+            <button 
+              type="button" 
+              onClick={() => setServerError(null)} 
+              className="text-rose-500 hover:text-rose-700 text-xs font-semibold px-2 py-1 rounded"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
+        {/* Success Modal / Card after Link Generation */}
         {createdInvitation && (
-          <div className="ui-card border-2 border-emerald-500 shadow-sm p-6 sm:p-8 space-y-5 animate-fadeIn">
+          <div className="ui-card border border-zinc-950 p-6 sm:p-8 space-y-5 bg-white shadow-md">
             <div className="flex items-start justify-between gap-4">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-                  <Check className="w-5 h-5" />
+                <div className="w-9 h-9 rounded-lg bg-zinc-950 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                  <Check className="w-4 h-4" />
                 </div>
                 <div>
-                  <span className="text-xs font-bold uppercase tracking-wider text-emerald-700 block">
-                    Invitation Link Generated Successfully
+                  <span className="text-[11px] font-mono uppercase tracking-wider text-emerald-700 block font-medium">
+                    Assessment Link Generated & Verified
                   </span>
-                  <h2 className="text-lg font-bold text-slate-900">
+                  <h2 className="text-base sm:text-lg font-semibold text-zinc-950">
                     {createdInvitation.jobConfig.seniorityLevel} {createdInvitation.jobConfig.jobTitle}
                   </h2>
                 </div>
               </div>
-              <span className="inline-flex items-center text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 uppercase">
+              <span className="inline-flex items-center text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 font-medium">
                 Active
               </span>
             </div>
 
             {/* Link Box */}
-            <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">
-                Candidate Invitation URL
+            <div className="p-3.5 bg-zinc-50 rounded-lg border border-zinc-200/80 space-y-2">
+              <label className="block text-[11px] font-mono uppercase tracking-wider text-zinc-500">
+                Single-Use Candidate Invitation URL
               </label>
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                 <input
                   type="text"
                   readOnly
                   value={`${baseUrl}/interview/${createdInvitation.token}`}
-                  className="flex-1 ui-input font-mono text-xs sm:text-sm select-all"
+                  className="flex-1 ui-input font-mono text-xs select-all bg-white"
                 />
                 <button
                   type="button"
                   onClick={handleCopyLink}
-                  className="ui-btn-primary whitespace-nowrap"
+                  className="ui-btn-primary whitespace-nowrap h-9 text-xs"
                 >
                   {copied ? (
                     <>
-                      <Check className="w-4 h-4 text-emerald-300" /> Copied!
+                      <Check className="w-3.5 h-3.5 text-emerald-400" /> Copied!
                     </>
                   ) : (
                     <>
-                      <Copy className="w-4 h-4" /> Copy Link
+                      <Copy className="w-3.5 h-3.5" /> Copy Link
                     </>
                   )}
                 </button>
@@ -260,45 +355,72 @@ export default function CreateInterviewPage() {
             </div>
 
             {/* Details info */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-slate-600 pt-1">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-zinc-600 pt-1 font-mono">
               <div className="flex items-center gap-2">
-                <User className="w-4 h-4 text-indigo-600" />
-                <span>Candidate: <strong className="text-slate-900">{createdInvitation.candidate?.fullName}</strong></span>
+                <User className="w-3.5 h-3.5 text-zinc-400" />
+                <span>Candidate: <strong className="text-zinc-900 font-sans">{createdInvitation.candidate?.fullName}</strong></span>
               </div>
               <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-indigo-600" />
-                <span>Expires: <strong className="text-slate-900">{new Date(createdInvitation.expiresAt).toLocaleDateString()}</strong></span>
+                <Clock className="w-3.5 h-3.5 text-zinc-400" />
+                <span>Expires: <strong className="text-zinc-900">{new Date(createdInvitation.expiresAt).toLocaleDateString()}</strong></span>
               </div>
               <div className="flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                <span>Questions: <strong className="text-slate-900">{createdInvitation.questions.length}</strong></span>
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Questions: <strong className="text-zinc-900">{createdInvitation.questions.length}</strong></span>
               </div>
             </div>
 
+            {/* Structured Interview Plan Preview */}
+            {createdInvitation.jobConfig.structuredPlan && (
+              <div className="p-4 bg-zinc-50 rounded-lg border border-zinc-200 text-xs space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-zinc-900 flex items-center gap-1.5 text-xs">
+                    <Sparkles className="w-3.5 h-3.5 text-zinc-700" /> AI Calibrated Interview Plan
+                  </span>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-zinc-200/70 text-zinc-800">
+                    Gemini 2.5 Structured
+                  </span>
+                </div>
+                <p className="text-zinc-600 leading-relaxed text-[11px] font-sans">
+                  {createdInvitation.jobConfig.structuredPlan.interviewStructureSummary}
+                </p>
+                <div className="space-y-1 pt-1">
+                  <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 block">Evaluated Competencies:</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {createdInvitation.jobConfig.structuredPlan.competencyCategories.map((cat, i) => (
+                      <span key={i} className="px-2 py-0.5 rounded bg-white border border-zinc-200 text-zinc-800 font-mono text-[10px]">
+                        {cat}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Action Buttons */}
-            <div className="pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
+            <div className="pt-3 border-t border-zinc-100 flex flex-wrap items-center justify-between gap-3">
               <Link
                 href={`/interview/${createdInvitation.token}`}
                 target="_blank"
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800"
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-zinc-700 hover:text-zinc-950"
               >
-                <span>Open Candidate Experience</span>
-                <ExternalLink className="w-3.5 h-3.5" />
+                <span>Preview Candidate Screen</span>
+                <ExternalLink className="w-3.5 h-3.5 text-zinc-400" />
               </Link>
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setCreatedInvitation(null)}
-                  className="ui-btn-secondary text-xs h-9"
+                  className="ui-btn-secondary text-xs h-8 px-3"
                 >
                   Create Another
                 </button>
                 <Link
-                  href="/dashboard"
-                  className="ui-btn-primary text-xs h-9 bg-slate-900 hover:bg-slate-800"
+                  href="/interviews"
+                  className="ui-btn-primary text-xs h-8 px-3.5"
                 >
-                  View in Dashboard
+                  View in Interviews
                 </Link>
               </div>
             </div>
@@ -306,22 +428,22 @@ export default function CreateInterviewPage() {
         )}
 
         {/* Configuration Form Card */}
-        <form onSubmit={handleSubmit} className="ui-card p-6 sm:p-8 space-y-8">
+        <form onSubmit={handleSubmit} className="ui-card p-6 sm:p-8 space-y-7">
           {/* SECTION 1: CANDIDATE & COMPANY ASSIGNMENT */}
           <div className="space-y-4">
-            <div className="border-b border-slate-100 pb-2.5 flex items-center justify-between">
-              <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                <Building className="w-4 h-4 text-indigo-600" />
-                1. Company & Candidate Assignment
+            <div className="border-b border-zinc-100 pb-2.5 flex items-center justify-between">
+              <h2 className="text-xs font-mono font-semibold text-zinc-900 uppercase tracking-wider flex items-center gap-2">
+                <Building className="w-3.5 h-3.5 text-zinc-500" />
+                1. Candidate & Organization Details
               </h2>
-              <span className="text-xs text-slate-400 font-medium">Pre-filled on invitation</span>
+              <span className="text-[11px] text-zinc-400 font-sans">Pre-populated on candidate screen</span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Company Name */}
               <div>
-                <label htmlFor="companyName" className="block text-xs font-semibold text-slate-700 mb-1.5">
-                  Hiring Company <span className="text-rose-500">*</span>
+                <label htmlFor="companyName" className="block text-xs font-medium text-zinc-700 mb-1">
+                  Hiring Organization <span className="text-rose-500">*</span>
                 </label>
                 <input
                   id="companyName"
@@ -343,7 +465,7 @@ export default function CreateInterviewPage() {
 
               {/* Candidate Full Name */}
               <div>
-                <label htmlFor="candidateName" className="block text-xs font-semibold text-slate-700 mb-1.5">
+                <label htmlFor="candidateName" className="block text-xs font-medium text-zinc-700 mb-1">
                   Candidate Full Name <span className="text-rose-500">*</span>
                 </label>
                 <input
@@ -366,7 +488,7 @@ export default function CreateInterviewPage() {
 
               {/* Candidate Email */}
               <div>
-                <label htmlFor="candidateEmail" className="block text-xs font-semibold text-slate-700 mb-1.5">
+                <label htmlFor="candidateEmail" className="block text-xs font-medium text-zinc-700 mb-1">
                   Candidate Email <span className="text-rose-500">*</span>
                 </label>
                 <input
@@ -378,7 +500,7 @@ export default function CreateInterviewPage() {
                     if (errors.candidateEmail) setErrors(prev => ({ ...prev, candidateEmail: '' }));
                   }}
                   placeholder="e.g. jordan.lee@example.com"
-                  className="ui-input"
+                  className="ui-input font-mono text-xs"
                 />
                 {errors.candidateEmail && (
                   <p className="text-xs text-rose-600 mt-1 flex items-center gap-1">
@@ -391,19 +513,19 @@ export default function CreateInterviewPage() {
 
           {/* SECTION 2: JOB DETAILS */}
           <div className="space-y-4 pt-2">
-            <div className="border-b border-slate-100 pb-2.5 flex items-center justify-between">
-              <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                <Briefcase className="w-4 h-4 text-indigo-600" />
-                2. Job Requirements
+            <div className="border-b border-zinc-100 pb-2.5 flex items-center justify-between">
+              <h2 className="text-xs font-mono font-semibold text-zinc-900 uppercase tracking-wider flex items-center gap-2">
+                <Briefcase className="w-3.5 h-3.5 text-zinc-500" />
+                2. Engineering Role Requirements
               </h2>
-              <span className="text-xs text-slate-400 font-medium">Role specifics</span>
+              <span className="text-[11px] text-zinc-400 font-sans">Defines AI question plan</span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Job Title */}
               <div>
-                <label htmlFor="jobTitle" className="block text-xs font-semibold text-slate-700 mb-1.5">
-                  Job Title <span className="text-rose-500">*</span>
+                <label htmlFor="jobTitle" className="block text-xs font-medium text-zinc-700 mb-1">
+                  Target Job Title <span className="text-rose-500">*</span>
                 </label>
                 <input
                   id="jobTitle"
@@ -424,13 +546,13 @@ export default function CreateInterviewPage() {
 
                 {/* Suggestions */}
                 <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                  <span className="text-[11px] text-slate-400">Quick roles:</span>
+                  <span className="text-[10px] font-mono uppercase text-zinc-400">Quick Roles:</span>
                   {SAMPLE_JOB_TITLES.slice(0, 4).map((title) => (
                     <button
                       key={title}
                       type="button"
                       onClick={() => handleJobTitleSelect(title)}
-                      className="text-[11px] px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
+                      className="text-[11px] px-2 py-0.5 rounded bg-zinc-100 hover:bg-zinc-200 text-zinc-700 transition-colors"
                     >
                       {title}
                     </button>
@@ -440,7 +562,7 @@ export default function CreateInterviewPage() {
 
               {/* Seniority Level */}
               <div>
-                <label htmlFor="seniorityLevel" className="block text-xs font-semibold text-slate-700 mb-1.5">
+                <label htmlFor="seniorityLevel" className="block text-xs font-medium text-zinc-700 mb-1">
                   Seniority Level
                 </label>
                 <select
@@ -460,8 +582,8 @@ export default function CreateInterviewPage() {
 
             {/* Job Description */}
             <div>
-              <label htmlFor="jobDescription" className="block text-xs font-semibold text-slate-700 mb-1.5">
-                Job Description <span className="text-rose-500">*</span>
+              <label htmlFor="jobDescription" className="block text-xs font-medium text-zinc-700 mb-1">
+                Role Context & Responsibilities <span className="text-rose-500">*</span>
               </label>
               <textarea
                 id="jobDescription"
@@ -472,7 +594,7 @@ export default function CreateInterviewPage() {
                   if (errors.jobDescription) setErrors(prev => ({ ...prev, jobDescription: '' }));
                 }}
                 placeholder="Describe role scope and responsibilities..."
-                className="w-full p-3 rounded-xl border border-slate-300 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 resize-y"
+                className="w-full p-3 rounded-lg border border-zinc-200/90 text-xs sm:text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-950/10 focus:border-zinc-900 resize-y bg-white font-sans leading-relaxed shadow-2xs"
               />
               {errors.jobDescription && (
                 <p className="text-xs text-rose-600 mt-1 flex items-center gap-1">
@@ -484,7 +606,7 @@ export default function CreateInterviewPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Required Experience */}
               <div>
-                <label htmlFor="requiredExperience" className="block text-xs font-semibold text-slate-700 mb-1.5">
+                <label htmlFor="requiredExperience" className="block text-xs font-medium text-zinc-700 mb-1">
                   Required Experience <span className="text-rose-500">*</span>
                 </label>
                 <input
@@ -502,20 +624,20 @@ export default function CreateInterviewPage() {
 
               {/* Technical Skills */}
               <div>
-                <label htmlFor="newSkillInput" className="block text-xs font-semibold text-slate-700 mb-1.5">
-                  Required Technical Skills <span className="text-rose-500">*</span>
+                <label htmlFor="newSkillInput" className="block text-xs font-medium text-zinc-700 mb-1">
+                  Required Technical Stack <span className="text-rose-500">*</span>
                 </label>
                 <div className="flex flex-wrap gap-1.5 mb-2">
                   {requiredSkills.map((skill) => (
                     <span
                       key={skill}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200"
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono bg-zinc-100 text-zinc-800 border border-zinc-200/80"
                     >
                       <span>{skill}</span>
                       <button
                         type="button"
                         onClick={() => handleRemoveSkill(skill)}
-                        className="p-0.5 rounded-full hover:bg-indigo-200 text-indigo-700"
+                        className="p-0.5 rounded hover:bg-zinc-200 text-zinc-500"
                       >
                         <X className="w-3 h-3" />
                       </button>
@@ -534,7 +656,7 @@ export default function CreateInterviewPage() {
                         handleAddSkill();
                       }
                     }}
-                    placeholder="Add skill (e.g. GraphQL, Tailwind)..."
+                    placeholder="Add skill (e.g. GraphQL, Postgres)..."
                     className="flex-1 ui-input h-9 text-xs"
                   />
                   <button
@@ -542,7 +664,7 @@ export default function CreateInterviewPage() {
                     onClick={handleAddSkill}
                     className="ui-btn-secondary h-9 px-3 text-xs"
                   >
-                    Add
+                    Add Tag
                   </button>
                 </div>
                 {errors.requiredSkills && (
@@ -556,19 +678,19 @@ export default function CreateInterviewPage() {
 
           {/* SECTION 3: INTERVIEW PARAMETERS & LINK EXPIRY */}
           <div className="space-y-4 pt-2">
-            <div className="border-b border-slate-100 pb-2.5 flex items-center justify-between">
-              <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                <Layers className="w-4 h-4 text-indigo-600" />
-                3. Interview Parameters & Link Security
+            <div className="border-b border-zinc-100 pb-2.5 flex items-center justify-between">
+              <h2 className="text-xs font-mono font-semibold text-zinc-900 uppercase tracking-wider flex items-center gap-2">
+                <Layers className="w-3.5 h-3.5 text-zinc-500" />
+                3. Assessment Parameters & Security
               </h2>
-              <span className="text-xs text-slate-400 font-medium">Recruiter controlled</span>
+              <span className="text-[11px] text-zinc-400 font-sans">Recruiter controls</span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Interview Type */}
               <div>
-                <span className="block text-xs font-semibold text-slate-700 mb-1.5">
-                  Interview Type
+                <span className="block text-xs font-medium text-zinc-700 mb-1.5">
+                  Assessment Focus
                 </span>
                 <div className="grid grid-cols-2 gap-2">
                   {(['Technical', 'HR', 'Behavioural', 'Mixed'] as const).map((type) => (
@@ -576,10 +698,10 @@ export default function CreateInterviewPage() {
                       type="button"
                       key={type}
                       onClick={() => setInterviewType(type)}
-                      className={`h-10 px-3 rounded-xl border text-xs font-semibold transition-all text-center ${
+                      className={`h-9 px-3 rounded-lg border text-xs font-medium transition-all text-center ${
                         interviewType === type
-                          ? 'border-indigo-600 bg-indigo-50 text-indigo-950 ring-1 ring-indigo-600'
-                          : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                          ? 'border-zinc-950 bg-zinc-950 text-white shadow-2xs'
+                          : 'border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300'
                       }`}
                     >
                       {type}
@@ -590,8 +712,8 @@ export default function CreateInterviewPage() {
 
               {/* Difficulty */}
               <div>
-                <span className="block text-xs font-semibold text-slate-700 mb-1.5">
-                  Difficulty Level
+                <span className="block text-xs font-medium text-zinc-700 mb-1.5">
+                  Depth & Rigor
                 </span>
                 <div className="grid grid-cols-3 gap-2">
                   {(['Beginner', 'Intermediate', 'Advanced'] as const).map((diff) => (
@@ -599,10 +721,10 @@ export default function CreateInterviewPage() {
                       type="button"
                       key={diff}
                       onClick={() => setDifficulty(diff)}
-                      className={`h-10 px-2 rounded-xl border text-xs font-semibold transition-all text-center ${
+                      className={`h-9 px-2 rounded-lg border text-xs font-medium transition-all text-center ${
                         difficulty === diff
-                          ? 'border-indigo-600 bg-indigo-600 text-white shadow-xs'
-                          : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                          ? 'border-zinc-950 bg-zinc-950 text-white shadow-2xs'
+                          : 'border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300'
                       }`}
                     >
                       {diff}
@@ -615,8 +737,8 @@ export default function CreateInterviewPage() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
               {/* Question Count */}
               <div>
-                <label htmlFor="questionCount" className="block text-xs font-semibold text-slate-700 mb-1.5">
-                  Questions Count
+                <label htmlFor="questionCount" className="block text-xs font-medium text-zinc-700 mb-1">
+                  Question Count
                 </label>
                 <select
                   id="questionCount"
@@ -624,8 +746,8 @@ export default function CreateInterviewPage() {
                   onChange={(e) => setQuestionCount(Number(e.target.value))}
                   className="ui-input cursor-pointer"
                 >
-                  <option value={3}>3 Questions (Quick screen)</option>
-                  <option value={5}>5 Questions (Standard)</option>
+                  <option value={3}>3 Questions (Brief intake)</option>
+                  <option value={5}>5 Questions (Standard screen)</option>
                   <option value={7}>7 Questions (In-depth)</option>
                   <option value={10}>10 Questions (Comprehensive)</option>
                 </select>
@@ -633,8 +755,8 @@ export default function CreateInterviewPage() {
 
               {/* Expected Duration */}
               <div>
-                <label htmlFor="expectedDurationMinutes" className="block text-xs font-semibold text-slate-700 mb-1.5">
-                  Expected Duration
+                <label htmlFor="expectedDurationMinutes" className="block text-xs font-medium text-zinc-700 mb-1">
+                  Target Duration
                 </label>
                 <select
                   id="expectedDurationMinutes"
@@ -651,8 +773,8 @@ export default function CreateInterviewPage() {
 
               {/* Expiration */}
               <div>
-                <label htmlFor="expiration" className="block text-xs font-semibold text-slate-700 mb-1.5">
-                  Link Expiration
+                <label htmlFor="expiration" className="block text-xs font-medium text-zinc-700 mb-1">
+                  Token Expiration
                 </label>
                 <select
                   id="expiration"
@@ -669,17 +791,27 @@ export default function CreateInterviewPage() {
           </div>
 
           {/* Form Actions */}
-          <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <p className="text-xs text-slate-500">
-              Candidate accesses only pre-filled details and begins the interview with no configuration options.
+          <div className="pt-4 border-t border-zinc-100 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <p className="text-xs text-zinc-500">
+              Candidate accesses only pre-filled details and enters assessment directly with zero configuration friction.
             </p>
 
             <button
               type="submit"
-              className="ui-btn-primary w-full sm:w-auto"
+              disabled={isGenerating}
+              className="ui-btn-primary w-full sm:w-auto flex items-center justify-center gap-2 h-10 px-5 text-xs font-semibold shadow-2xs"
             >
-              <span>Generate Invitation Link</span>
-              <ArrowRight className="w-4 h-4" />
+              {isGenerating ? (
+                <>
+                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Synthesizing Interview Plan...</span>
+                </>
+              ) : (
+                <>
+                  <span>Generate Assessment Link</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </>
+              )}
             </button>
           </div>
         </form>

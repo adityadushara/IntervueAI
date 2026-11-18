@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import { Suspense } from 'react';
-import Navbar from '@/components/Navbar';
-import Footer from '@/components/Footer';
+import { AuthProvider } from '@/context/AuthContext';
+import AppShell from '@/components/AppShell';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'IntervueAI - AI Recruitment & Interview Platform',
-  description: 'AI-powered technical recruitment interview platform for hiring teams and engineering managers.',
+  title: 'IntervueAI - AI Voice Technical Interviews',
+  description: 'AI-powered technical voice interview platform for hiring teams and engineering managers.',
 };
 
 export default function RootLayout({
@@ -27,14 +27,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full`}>
-      <body className="min-h-screen flex flex-col bg-slate-50 text-slate-900 antialiased font-sans">
-        <Suspense fallback={<header className="h-16 border-b border-slate-200 bg-white" />}>
-          <Navbar />
-        </Suspense>
-        <main className="flex-1 flex flex-col">{children}</main>
-        <Suspense fallback={<footer className="h-16 border-t border-slate-200 bg-white" />}>
-          <Footer />
-        </Suspense>
+      <body className="min-h-screen bg-[#fcfcfd] text-zinc-900 antialiased font-sans selection:bg-zinc-900 selection:text-white">
+        <AuthProvider>
+          <Suspense fallback={<div className="min-h-screen bg-[#fcfcfd]" />}>
+            <AppShell>{children}</AppShell>
+          </Suspense>
+        </AuthProvider>
       </body>
     </html>
   );
